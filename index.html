@@ -3,16 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="description" content="CorelDRAW Web Studio - Professional Vector Graphics, Page Layout & Illustration Suite in the browser. Featuring Bézier curves, Boolean Shaping, 3D Extrusion, Node Editing, and Auto-Trace." />
-    <title>CorelDRAW Web Studio — Vector Graphics & Illustration Suite</title>
+    <meta name="theme-color" content="#1f2430" />
+    <meta name="description" content="Devin's CorelDRAW - Professional In-Browser & Offline Vector Graphics, Page Layout & Illustration Suite with Bézier curves, Boolean shaping, 3D Extrusion, and PowerTRACE." />
+    <title>Devin's CorelDRAW — Vector Graphics & Illustration Studio</title>
     
     <!-- Google Fonts for rich vector typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@600;800&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Montserrat:wght@400;600;800;900&family=Outfit:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,800;1,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+
+    <!-- Service Worker Registration for 100% Offline Support -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Devin\'s CorelDRAW Service Worker Registered (Offline Ready):', reg.scope))
+            .catch(err => console.error('Service Worker registration failed:', err));
+        });
+      }
+    </script>
   </head>
-  <body class="bg-[#1e1e1e] text-[#e0e0e0] select-none overflow-hidden antialiased">
+  <body class="bg-[#181a20] text-[#e0e0e0] select-none overflow-hidden antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

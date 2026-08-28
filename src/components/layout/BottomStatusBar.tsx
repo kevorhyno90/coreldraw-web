@@ -77,8 +77,8 @@ export const BottomStatusBar: React.FC = () => {
           </button>
         </div>
 
-        {/* Center: Selection Status info */}
-        <div className="text-[11px] text-gray-300 hidden md:block">
+        {/* Center: Selection Status info & Offline Badge */}
+        <div className="flex items-center space-x-3 text-[11px] text-gray-300 hidden md:flex">
           {selectedObjects.length === 0 ? (
             <span className="text-gray-500">{activeObjects.length} Objects on Current Page</span>
           ) : selectedObjects.length === 1 ? (
@@ -88,6 +88,12 @@ export const BottomStatusBar: React.FC = () => {
           ) : (
             <span className="font-semibold text-blue-400">{selectedObjects.length} Objects Selected</span>
           )}
+
+          <span className="text-gray-600">|</span>
+          <span className="text-emerald-400 flex items-center space-x-1" title="Changes are automatically persisted offline in your browser">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+            <span className="text-[10px]">Autosaved Offline</span>
+          </span>
         </div>
 
         {/* Right: Active Fill & Outline Indicators */}

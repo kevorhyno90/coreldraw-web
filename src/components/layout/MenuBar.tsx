@@ -67,6 +67,9 @@ export const MenuBar: React.FC = () => {
     getProjectDocument,
     loadProjectDocument,
     addObject,
+    isOnline,
+    isInstallable,
+    promptInstall,
   } = useCorel();
 
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -134,11 +137,12 @@ export const MenuBar: React.FC = () => {
           onClick={() => setOpenDialog('about')}
         >
           <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-emerald-500 via-cyan-400 to-indigo-600 flex items-center justify-center text-[10px] font-black text-white shadow-sm">
-            C
+            D
           </div>
-          <span className="font-bold tracking-tight text-white hidden sm:inline">CorelDRAW</span>
-          <span className="text-[10px] px-1 py-0.2 bg-emerald-500/20 text-emerald-400 rounded font-semibold border border-emerald-500/30">
-            WEB 2026
+          <span className="font-bold tracking-tight text-white hidden sm:inline">Devin's CorelDRAW</span>
+          <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 rounded font-semibold border border-emerald-500/30 flex items-center">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1 animate-pulse" />
+            Offline Ready
           </span>
         </div>
 
@@ -194,6 +198,13 @@ export const MenuBar: React.FC = () => {
                   <span className="text-gray-500 text-[10px]">Ctrl+E</span>
                 </button>
                 <div className="border-t border-[#374151] my-1" />
+                <button
+                  onClick={() => { promptInstall(); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between font-medium text-cyan-300"
+                >
+                  <span className="flex items-center"><Download className="w-3.5 h-3.5 mr-2 text-cyan-400" /> Install Desktop App (PWA)</span>
+                  <span className="text-gray-500 text-[10px]">Offline</span>
+                </button>
                 <button
                   onClick={handlePrint}
                   className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between"

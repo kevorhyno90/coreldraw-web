@@ -140,6 +140,11 @@ interface CorelContextType {
   canRedo: boolean;
   pushHistory: (actionName: string) => void;
 
+  // Offline & PWA
+  isOnline: boolean;
+  isInstallable: boolean;
+  promptInstall: () => void;
+
   // Project Serialization
   loadProjectDocument: (doc: ProjectDocument) => void;
   loadTemplate: (templateId: string) => void;
@@ -149,7 +154,7 @@ interface CorelContextType {
 const CorelContext = createContext<CorelContextType | null>(null);
 
 export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projectTitle, setProjectTitle] = useState('CorelDRAW Artwork 1');
+  const [projectTitle, setProjectTitle] = useState("Devin's CorelDRAW Artwork 1");
   const [pages, setPages] = useState<CorelPage[]>([DEFAULT_PAGE]);
   const [activePageId, setActivePageId] = useState('page_1');
   
@@ -165,6 +170,62 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [viewMode, setViewMode] = useState<ViewMode>('enhanced');
   const [activeDockerTab, setActiveDockerTab] = useState<DockerTab | null>('properties');
   const [openDialog, setOpenDialog] = useState<'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | null>(null);
+
+  // Offline and PWA Install Prompt State
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
+    // Try restore offline autosaved project
+    try {
+      const autosaveStr = localStorage.getItem('devins_coreldraw_autosave');
+      if (autosaveStr) {
+        const saved = JSON.parse(autosaveStr);
+        if (saved.pages && saved.objects) {
+          setProjectTitle(saved.name || "Devin's CorelDRAW Artwork 1");
+          setPages(saved.pages);
+          setActivePageId(saved.activePageId || saved.pages[0]?.id || 'page_1');
+          setObjects(saved.objects);
+          if (saved.guidelines) setGuidelines(saved.guidelines);
+          if (saved.colorPalette) setColorPalette(saved.colorPalette);
+        }
+      }
+    } catch (err) {
+      console.warn('Autosave restore skipped:', err);
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    };
+  }, []);
+
+  const promptInstall = useCallback(async () => {
+    if (!deferredPrompt) {
+      alert("Devin's CorelDRAW is already installed or your browser doesn't support install prompts. It runs 100% offline automatically!");
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    }
+  }, [deferredPrompt]);
 
   // Viewport transform
   const [zoom, setZoom] = useState(1);
@@ -886,6 +947,19 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     alignSelected,
   ]);
 
+  // Debounced Autosave to localStorage for 100% offline resilience
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const doc = getProjectDocument();
+        localStorage.setItem('devins_coreldraw_autosave', JSON.stringify(doc));
+      } catch (e) {
+        // Storage quota full or disabled
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [getProjectDocument]);
+
   return (
     <CorelContext.Provider
       value={{
@@ -962,6 +1036,9 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         canUndo,
         canRedo,
         pushHistory,
+        isOnline,
+        isInstallable,
+        promptInstall,
         loadProjectDocument,
         loadTemplate,
         getProjectDocument,

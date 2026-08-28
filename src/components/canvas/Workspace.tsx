@@ -15,6 +15,11 @@ import {
   distance,
 } from '../../engine/vectorMath';
 import { generate3DExtrusionFacets } from '../../engine/effectsEngine';
+import {
+  generateCalligraphicStroke,
+  generateSprayerParticles,
+  ARTISTIC_BRUSH_PRESETS,
+} from '../../engine/artisticMediaEngine';
 
 export const Workspace: React.FC = () => {
   const {
@@ -41,6 +46,10 @@ export const Workspace: React.FC = () => {
     activeOutlineColor,
     activeOutlineWidth,
     convertToCurves,
+    activeBrushPreset,
+    activeBrushWidth,
+    activeBrushAngle,
+    activeBrushSmoothing,
   } = useCorel();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -165,10 +174,11 @@ export const Workspace: React.FC = () => {
       return;
     }
 
-    // Shape Drawing tools
+    // Shape & Brush Drawing tools
     if (
       [
         'freehand',
+        'artistic-media',
         'rectangle',
         '3point-rectangle',
         'ellipse',
@@ -180,7 +190,7 @@ export const Workspace: React.FC = () => {
       ].includes(activeTool)
     ) {
       setIsDrawing(true);
-      if (activeTool === 'freehand') {
+      if (activeTool === 'freehand' || activeTool === 'artistic-media') {
         setFreehandPoints([pagePt]);
       }
       return;
@@ -330,8 +340,8 @@ export const Workspace: React.FC = () => {
       return;
     }
 
-    // Freehand Drawing stream
-    if (isDrawing && activeTool === 'freehand') {
+    // Freehand & Artistic Media Drawing stream
+    if (isDrawing && (activeTool === 'freehand' || activeTool === 'artistic-media')) {
       setFreehandPoints(prev => [...prev, pagePt]);
     }
   };
@@ -435,6 +445,78 @@ export const Workspace: React.FC = () => {
           fill: { type: 'none', color: '#000000' },
           outline: { color: '#38bdf8', width: 2, style: 'solid', cap: 'round', join: 'round', startArrow: 'arrow', endArrow: 'arrow' },
         });
+        setActiveTool('pick');
+      } else if (activeTool === 'artistic-media' && freehandPoints.length > 1) {
+        const currentPreset = ARTISTIC_BRUSH_PRESETS.find(p => p.id === activeBrushPreset) || ARTISTIC_BRUSH_PRESETS[0];
+
+        if (currentPreset.category === 'sprayer') {
+          // Object Sprayer: generate scattered vector elements along path
+          const particles = generateSprayerParticles(freehandPoints, currentPreset, activeFillColor);
+          particles.forEach(p => addObject(p));
+        } else if (currentPreset.category === 'calligraphic') {
+          // Calligraphic Ribbon: generate 45-degree chisel subpaths
+          const calliSubpaths = generateCalligraphicStroke(freehandPoints, activeBrushWidth, activeBrushAngle);
+          // Shift coordinates relative to minX, minY
+          const relSubpaths = calliSubpaths.map(sp => ({
+            ...sp,
+            nodes: sp.nodes.map(n => ({ ...n, x: n.x - minX, y: n.y - minY })),
+          }));
+
+          addObject({
+            name: `Calligraphy Stroke ${activeObjects.length + 1}`,
+            type: 'path',
+            transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+            subpaths: relSubpaths,
+            fill: { type: 'solid', color: activeFillColor },
+            outline: { color: 'none', width: 0, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
+            shadow: { enabled: false, color: '#000', blur: 0, offsetX: 0, offsetY: 0, opacity: 0 },
+          });
+        } else {
+          // Artistic & Paint Brushes (Watercolor, Neon, Charcoal, Oil)
+          const nodes: BezierNode[] = [];
+          const step = Math.max(1, Math.floor(freehandPoints.length / 20));
+
+          for (let i = 0; i < freehandPoints.length; i += step) {
+            const pt = freehandPoints[i];
+            nodes.push({
+              id: `art_node_${i}`,
+              x: pt.x - minX,
+              y: pt.y - minY,
+              type: 'smooth',
+            });
+          }
+
+          const isNeon = currentPreset.id === 'neon_glow';
+          const isWatercolor = currentPreset.id === 'watercolor_wash';
+
+          addObject({
+            name: `${currentPreset.name} ${activeObjects.length + 1}`,
+            type: 'path',
+            transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+            subpaths: [{ isClosed: false, nodes }],
+            fill: { type: 'none', color: '#000' },
+            outline: {
+              color: isNeon ? '#38bdf8' : activeFillColor,
+              width: activeBrushWidth,
+              style: currentPreset.id === 'charcoal_rough' ? 'dashed' : 'solid',
+              cap: 'round',
+              join: 'round',
+              startArrow: 'none',
+              endArrow: 'none',
+            },
+            shadow: {
+              enabled: isNeon,
+              color: isNeon ? activeFillColor : '#000000',
+              blur: isNeon ? 12 : 0,
+              offsetX: 0,
+              offsetY: 0,
+              opacity: isNeon ? 0.9 : 0,
+            },
+            opacity: isWatercolor ? 0.65 : currentPreset.opacity,
+          });
+        }
+
+        setFreehandPoints([]);
         setActiveTool('pick');
       } else if (activeTool === 'freehand' && freehandPoints.length > 1) {
         // Downsample and smooth freehand path to bezier
@@ -662,14 +744,17 @@ export const Workspace: React.FC = () => {
           );
         })}
 
-        {/* Freehand Realtime Drawing Curve */}
-        {isDrawing && activeTool === 'freehand' && freehandPoints.length > 1 && (
+        {/* Freehand & Artistic Media Realtime Drawing Curve Preview */}
+        {isDrawing && (activeTool === 'freehand' || activeTool === 'artistic-media') && freehandPoints.length > 1 && (
           <path
             d={freehandPoints.reduce((acc, pt, i) => (i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`), '')}
             fill="none"
-            stroke="#3b82f6"
-            strokeWidth={activeOutlineWidth || 2}
-            strokeDasharray="2,2"
+            stroke={activeTool === 'artistic-media' ? activeFillColor : '#3b82f6'}
+            strokeWidth={activeTool === 'artistic-media' ? activeBrushWidth : activeOutlineWidth || 2}
+            strokeDasharray={activeTool === 'artistic-media' ? undefined : '2,2'}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.8}
           />
         )}
 

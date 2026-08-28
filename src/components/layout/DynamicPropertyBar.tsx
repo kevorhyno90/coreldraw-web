@@ -27,6 +27,7 @@ import {
   Hexagon,
 } from 'lucide-react';
 import { BooleanOp } from '../../engine/booleanOps';
+import { ARTISTIC_BRUSH_PRESETS } from '../../engine/artisticMediaEngine';
 
 const FONT_FAMILIES = [
   'Inter',
@@ -58,7 +59,111 @@ export const DynamicPropertyBar: React.FC = () => {
     bringToFront,
     sendToBack,
     selectionBounds,
+    activeBrushPreset,
+    setActiveBrushPreset,
+    activeBrushWidth,
+    setActiveBrushWidth,
+    activeBrushAngle,
+    setActiveBrushAngle,
+    activeBrushSmoothing,
+    setActiveBrushSmoothing,
   } = useCorel();
+
+  // Artistic Media Tool Ribbon
+  if (activeTool === 'artistic-media') {
+    const currentPreset = ARTISTIC_BRUSH_PRESETS.find(p => p.id === activeBrushPreset) || ARTISTIC_BRUSH_PRESETS[0];
+
+    return (
+      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[36px] overflow-x-auto text-gray-300">
+        <span className="font-semibold text-emerald-400 uppercase text-[10px] tracking-wider flex items-center">
+          <Sparkles className="w-3.5 h-3.5 mr-1" /> Artistic Media:
+        </span>
+
+        {/* Preset Selector */}
+        <div className="flex items-center space-x-1.5">
+          <span className="text-gray-400">Brush Preset:</span>
+          <select
+            value={activeBrushPreset}
+            onChange={e => {
+              const selected = ARTISTIC_BRUSH_PRESETS.find(p => p.id === e.target.value);
+              if (selected) {
+                setActiveBrushPreset(selected.id);
+                setActiveBrushWidth(selected.defaultWidth);
+                if (selected.angle) setActiveBrushAngle(selected.angle);
+                setActiveBrushSmoothing(selected.smoothing);
+              }
+            }}
+            className="bg-[#262e3d] text-white px-2 py-0.5 rounded border border-[#374151] outline-none font-medium"
+          >
+            <optgroup label="✒️ Calligraphic & Presets">
+              {ARTISTIC_BRUSH_PRESETS.filter(p => p.category === 'calligraphic' || p.category === 'preset').map(p => (
+                <option key={p.id} value={p.id}>{p.previewIcon} {p.name}</option>
+              ))}
+            </optgroup>
+            <optgroup label="🎨 Artistic & Paint Brushes">
+              {ARTISTIC_BRUSH_PRESETS.filter(p => p.category === 'brush').map(p => (
+                <option key={p.id} value={p.id}>{p.previewIcon} {p.name}</option>
+              ))}
+            </optgroup>
+            <optgroup label="✨ Object Sprayers">
+              {ARTISTIC_BRUSH_PRESETS.filter(p => p.category === 'sprayer').map(p => (
+                <option key={p.id} value={p.id}>{p.previewIcon} {p.name}</option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+
+        {/* Width */}
+        <div className="flex items-center space-x-1">
+          <span className="text-gray-400">Width:</span>
+          <input
+            type="number"
+            min={1}
+            max={120}
+            value={activeBrushWidth}
+            onChange={e => setActiveBrushWidth(Math.max(1, Number(e.target.value)))}
+            className="w-14 bg-[#262e3d] text-white px-1.5 py-0.5 rounded border border-[#374151] outline-none text-right font-mono"
+          />
+          <span className="text-gray-500">px</span>
+        </div>
+
+        {/* Angle (for Calligraphic) */}
+        {currentPreset.category === 'calligraphic' && (
+          <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
+            <span className="text-gray-400">Nib Angle:</span>
+            <input
+              type="range"
+              min={0}
+              max={180}
+              value={activeBrushAngle}
+              onChange={e => setActiveBrushAngle(Number(e.target.value))}
+              className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
+            />
+            <span className="text-white font-mono">{activeBrushAngle}°</span>
+          </div>
+        )}
+
+        {/* Smoothing */}
+        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
+          <span className="text-gray-400">Smoothing:</span>
+          <input
+            type="range"
+            min={0.1}
+            max={0.95}
+            step={0.05}
+            value={activeBrushSmoothing}
+            onChange={e => setActiveBrushSmoothing(Number(e.target.value))}
+            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
+          />
+          <span className="text-white font-mono">{Math.round(activeBrushSmoothing * 100)}%</span>
+        </div>
+
+        <span className="text-gray-500 text-[11px] italic hidden xl:inline">
+          {currentPreset.description}
+        </span>
+      </div>
+    );
+  }
 
   // Page Property Bar (When nothing is selected)
   if (selectedObjects.length === 0) {

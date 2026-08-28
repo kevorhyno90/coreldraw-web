@@ -121,6 +121,16 @@ interface CorelContextType {
   // Boolean Shaping
   applyBooleanOp: (op: BooleanOp) => void;
 
+  // Artistic Media & Brushes
+  activeBrushPreset: string;
+  setActiveBrushPreset: (p: string) => void;
+  activeBrushWidth: number;
+  setActiveBrushWidth: (w: number) => void;
+  activeBrushAngle: number;
+  setActiveBrushAngle: (a: number) => void;
+  activeBrushSmoothing: number;
+  setActiveBrushSmoothing: (s: number) => void;
+
   // Color Palette & Active Colors
   colorPalette: string[];
   setColorPalette: (palette: string[]) => void;
@@ -246,6 +256,12 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activeFillColor, setActiveFillColor] = useState<string>('#3b82f6');
   const [activeOutlineColor, setActiveOutlineColor] = useState<string>('#000000');
   const [activeOutlineWidth, setActiveOutlineWidth] = useState<number>(2);
+
+  // Artistic Media Brush States
+  const [activeBrushPreset, setActiveBrushPreset] = useState<string>('calligraphy_classic');
+  const [activeBrushWidth, setActiveBrushWidth] = useState<number>(18);
+  const [activeBrushAngle, setActiveBrushAngle] = useState<number>(45);
+  const [activeBrushSmoothing, setActiveBrushSmoothing] = useState<number>(0.7);
 
   // History Stack
   const [history, setHistory] = useState<HistoryStep[]>([]);
@@ -925,9 +941,11 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setActiveTool('text');
       } else if (e.key.toLowerCase() === 'y' && !e.ctrlKey) {
         setActiveTool('polygon');
+      } else if (e.key.toLowerCase() === 'i' && !e.ctrlKey) {
+        setActiveTool('artistic-media');
       } else if (e.key.toLowerCase() === 'g' && !e.ctrlKey) {
         setActiveTool('interactive-fill');
-      } else if (e.key.toLowerCase() === 'p' && !e.ctrlKey && !e.ctrlKey) {
+      } else if (e.key.toLowerCase() === 'p' && !e.ctrlKey) {
         alignSelected('page-center');
       }
     };
@@ -1021,6 +1039,14 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ungroupSelected,
         alignSelected,
         applyBooleanOp,
+        activeBrushPreset,
+        setActiveBrushPreset,
+        activeBrushWidth,
+        setActiveBrushWidth,
+        activeBrushAngle,
+        setActiveBrushAngle,
+        activeBrushSmoothing,
+        setActiveBrushSmoothing,
         colorPalette,
         setColorPalette,
         activeFillColor,

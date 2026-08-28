@@ -84,8 +84,8 @@ interface CorelContextType {
   setViewMode: (m: ViewMode) => void;
   activeDockerTab: DockerTab | null;
   setActiveDockerTab: (tab: DockerTab | null) => void;
-  openDialog: 'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | null;
-  setOpenDialog: (d: 'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | null) => void;
+  openDialog: 'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | null;
+  setOpenDialog: (d: 'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | null) => void;
 
   // Viewport navigation
   zoom: number;
@@ -179,7 +179,7 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activeFlyout, setActiveFlyout] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('enhanced');
   const [activeDockerTab, setActiveDockerTab] = useState<DockerTab | null>('properties');
-  const [openDialog, setOpenDialog] = useState<'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | null>(null);
+  const [openDialog, setOpenDialog] = useState<'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | null>(null);
 
   // Offline and PWA Install Prompt State
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);

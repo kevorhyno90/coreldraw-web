@@ -12,6 +12,7 @@ import { ExportDialog } from './components/dialogs/ExportDialog';
 import { TemplatesDialog } from './components/dialogs/TemplatesDialog';
 import { ShortcutsDialog } from './components/dialogs/ShortcutsDialog';
 import { AboutDialog } from './components/dialogs/AboutDialog';
+import { CommandPaletteDialog } from './components/dialogs/CommandPaletteDialog';
 
 export function CorelDrawApp() {
   return (
@@ -38,6 +39,7 @@ export function CorelDrawApp() {
         <TemplatesDialog />
         <ShortcutsDialog />
         <AboutDialog />
+        <CommandPaletteDialog />
       </div>
     </CorelProvider>
   );

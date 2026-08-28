@@ -111,6 +111,14 @@ export const StandardToolbar: React.FC = () => {
         >
           <Download className="w-4 h-4 text-teal-400" />
         </button>
+        <button
+          onClick={() => setOpenDialog('command' as any)}
+          title="Quick Command Search (Ctrl+K)"
+          className="p-1 hover:bg-[#323c4d] text-emerald-400 hover:text-emerald-300 rounded flex items-center space-x-1"
+        >
+          <Sparkles className="w-4 h-4" />
+          <span className="text-[10px] hidden lg:inline font-mono">Ctrl+K</span>
+        </button>
 
         <div className="h-4 w-[1px] bg-[#374151] mx-1" />
 

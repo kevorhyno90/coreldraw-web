@@ -525,6 +525,28 @@ export const MenuBar: React.FC = () => {
               <div className="absolute left-0 top-full mt-0.5 w-56 bg-[#1f2430] border border-[#374151] rounded-md shadow-2xl py-1 z-50 text-gray-200">
                 <div className="px-3 py-1 text-[10px] uppercase font-bold text-gray-500 tracking-wider">Inspectors & Dockers</div>
                 <button
+                  onClick={() => { setActiveDockerTab('typography'); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between font-medium text-amber-300"
+                >
+                  <span>Typography & Font Manager</span>
+                  {activeDockerTab === 'typography' && <span className="text-emerald-400">✓</span>}
+                </button>
+                <button
+                  onClick={() => { setActiveDockerTab('photo'); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between font-medium text-cyan-300"
+                >
+                  <span>Photo & Bitmap Lab</span>
+                  {activeDockerTab === 'photo' && <span className="text-emerald-400">✓</span>}
+                </button>
+                <button
+                  onClick={() => { setActiveDockerTab('ai'); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between font-medium text-purple-300"
+                >
+                  <span>AI Vector Design Studio</span>
+                  {activeDockerTab === 'ai' && <span className="text-emerald-400">✓</span>}
+                </button>
+                <div className="border-t border-[#374151] my-1" />
+                <button
                   onClick={() => { setActiveDockerTab('properties'); setActiveMenu(null); }}
                   className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between"
                 >

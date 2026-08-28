@@ -728,6 +728,23 @@ export const Workspace: React.FC = () => {
                   </g>
                 )}
 
+                {/* Bitmap / Photo Image Object with Filters */}
+                {obj.type === 'image' && obj.imageProps && (
+                  <image
+                    href={obj.imageProps.src}
+                    x={0}
+                    y={0}
+                    width={w}
+                    height={h}
+                    preserveAspectRatio="none"
+                    style={{
+                      filter: obj.imageProps.filter
+                        ? `brightness(${obj.imageProps.filter.brightness}%) contrast(${obj.imageProps.filter.contrast}%) saturate(${obj.imageProps.filter.saturation}%) hue-rotate(${obj.imageProps.filter.hueRotate}deg) blur(${obj.imageProps.filter.blur}px) sepia(${obj.imageProps.filter.sepia}%) grayscale(${obj.imageProps.filter.grayscale}%)`
+                        : undefined,
+                    }}
+                  />
+                )}
+
                 {/* Vector Paths & Shapes */}
                 {obj.subpaths.length > 0 && (
                   <path

@@ -184,10 +184,14 @@ export interface CorelObject {
     naturalWidth: number;
     naturalHeight: number;
     filter?: {
-      brightness: number;
-      contrast: number;
+      brightness: number; // 50 to 200
+      contrast: number; // 50 to 200
+      saturation: number; // 0 to 200
+      hueRotate: number; // 0 to 360
+      blur: number; // 0 to 20
+      sepia: number; // 0 to 100
+      grayscale: number; // 0 to 100
       invert: boolean;
-      grayscale: boolean;
     };
   };
   groupProps?: {
@@ -288,6 +292,9 @@ export type DockerTab =
   | 'shaping'
   | 'colors'
   | 'effects'
+  | 'photo'
+  | 'typography'
+  | 'ai'
   | 'trace'
   | 'align'
   | 'history';

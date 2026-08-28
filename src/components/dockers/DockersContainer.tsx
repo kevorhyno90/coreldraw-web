@@ -10,6 +10,9 @@ import { EffectsDocker } from './EffectsDocker';
 import { AutoTraceDocker } from './AutoTraceDocker';
 import { HistoryDocker } from './HistoryDocker';
 import { AlignDocker } from './AlignDocker';
+import { PhotoEditingDocker } from './PhotoEditingDocker';
+import { TypographyDocker } from './TypographyDocker';
+import { AiAssistantDocker } from './AiAssistantDocker';
 import {
   SlidersHorizontal,
   Layers,
@@ -20,6 +23,9 @@ import {
   Sparkles,
   History,
   AlignLeft,
+  Image as ImageIcon,
+  Type,
+  Bot,
   ChevronRight,
   X,
 } from 'lucide-react';
@@ -34,11 +40,14 @@ interface DockerItem {
 const DOCKERS: DockerItem[] = [
   { id: 'properties', title: 'Properties', icon: SlidersHorizontal, component: PropertiesDocker },
   { id: 'objects', title: 'Objects & Layers', icon: Layers, component: ObjectManagerDocker },
-  { id: 'transform', title: 'Transform', icon: Move, component: TransformDocker },
-  { id: 'shaping', title: 'Shaping', icon: Shapes, component: ShapingDocker },
+  { id: 'typography', title: 'Typography Manager', icon: Type, component: TypographyDocker },
+  { id: 'photo', title: 'Photo & Bitmap Lab', icon: ImageIcon, component: PhotoEditingDocker },
+  { id: 'ai', title: 'AI Vector Studio', icon: Bot, component: AiAssistantDocker },
   { id: 'effects', title: 'Effects & 3D', icon: Boxes, component: EffectsDocker },
+  { id: 'shaping', title: 'Shaping & Booleans', icon: Shapes, component: ShapingDocker },
   { id: 'colors', title: 'Color Harmonies', icon: Palette, component: ColorPaletteDocker },
   { id: 'trace', title: 'PowerTRACE', icon: Sparkles, component: AutoTraceDocker },
+  { id: 'transform', title: 'Transform', icon: Move, component: TransformDocker },
   { id: 'align', title: 'Align & Distribute', icon: AlignLeft, component: AlignDocker },
   { id: 'history', title: 'History', icon: History, component: HistoryDocker },
 ];

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="corelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00C853" />
+      <stop offset="50%" stop-color="#64DD17" />
+      <stop offset="100%" stop-color="#FFD600" />
+    </linearGradient>
+    <linearGradient id="balloonGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#00E676" />
+      <stop offset="60%" stop-color="#00B0FF" />
+      <stop offset="100%" stop-color="#651FFF" />
+    </linearGradient>
+  </defs>
+  <!-- Iconic Balloon Vector -->
+  <path d="M32 4 C18 4 8 16 8 28 C8 39 20 48 30 54 L30 58 L34 58 L34 54 C44 48 56 39 56 28 C56 16 46 4 32 4 Z" fill="url(#balloonGrad)"/>
+  <ellipse cx="26" cy="20" rx="6" ry="12" fill="#FFFFFF" opacity="0.3" transform="rotate(-25 26 20)"/>
+  <path d="M28 58 L36 58 L34 62 L30 62 Z" fill="#37474F"/>
+</svg>

@@ -1,10 +1,13 @@
-const CACHE_NAME = 'devins-coreldraw-v1';
+const CACHE_NAME = 'devins-coreldraw-v2';
 
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
 ];
 
 // Install Event - Pre-cache core shell

@@ -30,6 +30,7 @@ import {
   Minimize2,
   Hand,
   Move,
+  Check,
 } from 'lucide-react';
 
 const PAGE_GAP = 120; // Horizontal gap between multi-page spreads
@@ -76,6 +77,8 @@ export const Workspace: React.FC = () => {
   } = useCorel();
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const inlineTextRef = useRef<HTMLTextAreaElement>(null);
+
   const [cursorPos, setCursorPos] = useState<Point2D>({ x: 0, y: 0 });
 
   // Spacebar tracking for hand pan
@@ -95,6 +98,11 @@ export const Workspace: React.FC = () => {
   const [isSelectingBox, setIsSelectingBox] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{ start: Point2D; end: Point2D } | null>(null);
 
+  // Live on-canvas text inline editing
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [isShiftKeyHeld, setIsShiftKeyHeld] = useState(false);
+  const [isCtrlKeyHeld, setIsCtrlKeyHeld] = useState(false);
+
   // Transform gizmo drag state
   const [transformMode, setTransformMode] = useState<'move' | 'resize' | 'rotate' | null>(null);
   const [transformHandle, setTransformHandle] = useState<string | undefined>();
@@ -107,11 +115,6 @@ export const Workspace: React.FC = () => {
 
   // Gradient tool drag state
   const [draggedGradHandle, setDraggedGradHandle] = useState<'start' | 'end' | null>(null);
-
-  // Scrollbar drag state
-  const [isDraggingHScroll, setIsDraggingHScroll] = useState(false);
-  const [isDraggingVScroll, setIsDraggingVScroll] = useState(false);
-  const [scrollDragStart, setScrollDragStart] = useState<number>(0);
 
   // Multi-page layout positions
   const pagePositions = useMemo(() => {
@@ -132,15 +135,12 @@ export const Workspace: React.FC = () => {
     return pagePositions.find(p => p.id === activePageId) || pagePositions[0];
   }, [pagePositions, activePageId]);
 
-  const totalContentWidth = useMemo(() => {
-    if (pagePositions.length === 0) return 1000;
-    const last = pagePositions[pagePositions.length - 1];
-    return last.offsetX + last.width;
-  }, [pagePositions]);
-
   // Global Keyboard Shortcuts (New Doc, Undo, Redo, Delete, Fit, F-keys)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      setIsShiftKeyHeld(e.shiftKey);
+      setIsCtrlKeyHeld(e.ctrlKey || e.metaKey);
+
       const isInput = (e.target as HTMLElement).matches('input, textarea, select');
       if (isInput) return;
 
@@ -184,10 +184,15 @@ export const Workspace: React.FC = () => {
         setActiveTool('shape');
       } else if (e.key.toLowerCase() === 'b') {
         setActiveTool('painterly-brush');
+      } else if (e.key === 'Escape') {
+        setEditingTextId(null);
+        clearSelection();
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      setIsShiftKeyHeld(e.shiftKey);
+      setIsCtrlKeyHeld(e.ctrlKey || e.metaKey);
       if (e.code === 'Space') {
         setIsSpacePressed(false);
       }
@@ -199,7 +204,15 @@ export const Workspace: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [setOpenDialog, deleteSelected, duplicateSelected, undo, redo, selectAll, zoomToFit, setActiveTool]);
+  }, [setOpenDialog, deleteSelected, duplicateSelected, undo, redo, selectAll, zoomToFit, setActiveTool, clearSelection]);
+
+  // Focus inline textarea on edit
+  useEffect(() => {
+    if (editingTextId && inlineTextRef.current) {
+      inlineTextRef.current.focus();
+      inlineTextRef.current.select();
+    }
+  }, [editingTextId]);
 
   // Convert Screen (Client) coords to Canvas space coords
   const screenToCanvas = useCallback(
@@ -255,13 +268,11 @@ export const Workspace: React.FC = () => {
       }
       setZoom(newZoom);
     } else if (e.shiftKey) {
-      // Horizontal sideways pan via Shift + Wheel
       setPan(prev => ({
         x: prev.x - (e.deltaY || e.deltaX),
         y: prev.y,
       }));
     } else {
-      // Standard 2D pan (supports touchpad sideways swipe & vertical wheel)
       setPan(prev => ({
         x: prev.x - e.deltaX,
         y: prev.y - e.deltaY,
@@ -271,6 +282,11 @@ export const Workspace: React.FC = () => {
 
   // Mouse Down
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Exit inline text edit if clicking outside
+    if (editingTextId && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+      setEditingTextId(null);
+    }
+
     // Pan mode (middle click, Space+Drag, Alt+Drag, or Pan Tool)
     if (e.button === 1 || activeTool === 'pan' || isSpacePressed || (e.button === 0 && e.altKey)) {
       setIsPanning(true);
@@ -284,6 +300,7 @@ export const Workspace: React.FC = () => {
     setDrawStart(canvasPt);
     setIsDrawing(true);
 
+    // Text Tool Click -> Instant on-canvas text creation and inline edit focus
     if (activeTool === 'text') {
       const currentOffsetX = activePagePos?.offsetX || 0;
       const newText = addObject({
@@ -292,7 +309,7 @@ export const Workspace: React.FC = () => {
         transform: {
           x: canvasPt.x - currentOffsetX,
           y: canvasPt.y - 20,
-          width: 250,
+          width: 280,
           height: 50,
           rotation: 0,
           scaleX: 1,
@@ -301,7 +318,7 @@ export const Workspace: React.FC = () => {
           skewY: 0,
         },
         textProps: {
-          text: 'CorelDRAW 2025',
+          text: 'Type your text...',
           fontFamily: 'Montserrat',
           fontSize: 36,
           fontWeight: 700,
@@ -315,7 +332,8 @@ export const Workspace: React.FC = () => {
         outline: { color: 'none', width: 0, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
       });
       setSelectedIds([newText.id]);
-      setActiveTool('pick');
+      setEditingTextId(newText.id);
+      setIsDrawing(false);
       return;
     }
 
@@ -325,7 +343,7 @@ export const Workspace: React.FC = () => {
       setPainterlyPoints([{ x: canvasPt.x, y: canvasPt.y, pressure: 0.7, speed: 1 }]);
     } else if (activeTool === 'pick') {
       // Start marquee selection box if clicked on empty canvas area
-      if ((e.target as HTMLElement).tagName === 'svg' || (e.target as HTMLElement).id === 'canvas-root-svg' || (e.target as HTMLElement).classList.contains('canvas-page-sheet')) {
+      if ((e.target as HTMLElement).tagName === 'svg' || (e.target as HTMLElement).id === 'corel-main-canvas-svg' || (e.target as HTMLElement).classList.contains('canvas-page-sheet')) {
         setIsSelectingBox(true);
         setSelectionBox({ start: canvasPt, end: canvasPt });
         if (!e.shiftKey) {
@@ -398,10 +416,26 @@ export const Workspace: React.FC = () => {
     if (isDrawing) {
       setIsDrawing(false);
       const currentOffsetX = activePagePos?.offsetX || 0;
-      const width = Math.abs(canvasPt.x - drawStart.x);
-      const height = Math.abs(canvasPt.y - drawStart.y);
-      const minX = Math.min(drawStart.x, canvasPt.x) - currentOffsetX;
-      const minY = Math.min(drawStart.y, canvasPt.y);
+      let width = Math.abs(canvasPt.x - drawStart.x);
+      let height = Math.abs(canvasPt.y - drawStart.y);
+
+      // Constraint: Ctrl key constrains to perfect square / circle 1:1 aspect ratio
+      if (e.ctrlKey || e.metaKey) {
+        const side = Math.max(width, height);
+        width = side;
+        height = side;
+      }
+
+      let minX = Math.min(drawStart.x, canvasPt.x) - currentOffsetX;
+      let minY = Math.min(drawStart.y, canvasPt.y);
+
+      // Constraint: Shift key draws centered from mouse origin
+      if (e.shiftKey) {
+        minX = drawStart.x - width - currentOffsetX;
+        minY = drawStart.y - height;
+        width = width * 2;
+        height = height * 2;
+      }
 
       // Painterly Brush Stroke 2025
       if (activeTool === 'painterly-brush' && painterlyPoints.length > 1) {
@@ -530,6 +564,11 @@ export const Workspace: React.FC = () => {
       setActivePageId(pageId);
     }
 
+    if (activeTool === 'text') {
+      setEditingTextId(obj.id);
+      return;
+    }
+
     if (activeTool === 'color-eyedropper') {
       alert(`Sampled Color: ${obj.fill.color}`);
       return;
@@ -565,6 +604,8 @@ export const Workspace: React.FC = () => {
   const panRight = () => setPan(p => ({ ...p, x: p.x - 200 }));
   const panUp = () => setPan(p => ({ ...p, y: p.y + 200 }));
   const panDown = () => setPan(p => ({ ...p, y: p.y - 200 }));
+
+  const editingObject = activeObjects.find(o => o.id === editingTextId && o.type === 'text');
 
   return (
     <div
@@ -776,7 +817,8 @@ export const Workspace: React.FC = () => {
                         </g>
                       )}
 
-                      {obj.type === 'text' && obj.textProps && (
+                      {/* Native SVG Text Element */}
+                      {obj.type === 'text' && obj.textProps && obj.id !== editingTextId && (
                         <text
                           x={0}
                           y={obj.textProps.fontSize}
@@ -792,10 +834,7 @@ export const Workspace: React.FC = () => {
                           filter={obj.shadow?.enabled && !isWireframe ? 'url(#canvas-shadow)' : undefined}
                           onDoubleClick={e => {
                             e.stopPropagation();
-                            const newText = window.prompt('Edit Text:', obj.textProps!.text);
-                            if (newText !== null) {
-                              updateObject(obj.id, { textProps: { ...obj.textProps!, text: newText } });
-                            }
+                            setEditingTextId(obj.id);
                           }}
                         >
                           {obj.textProps.text}
@@ -874,6 +913,20 @@ export const Workspace: React.FC = () => {
           />
         )}
 
+        {/* Realtime Drawing Wireframe Box for Rectangles / Ellipses */}
+        {isDrawing && (activeTool === 'rectangle' || activeTool === 'ellipse') && (
+          <rect
+            x={Math.min(drawStart.x, cursorPos.x)}
+            y={Math.min(drawStart.y, cursorPos.y)}
+            width={Math.abs(cursorPos.x - drawStart.x)}
+            height={Math.abs(cursorPos.y - drawStart.y)}
+            fill="none"
+            stroke="#38bdf8"
+            strokeWidth={1.5 / zoom}
+            strokeDasharray={`${4 / zoom},${4 / zoom}`}
+          />
+        )}
+
         {/* Freehand Realtime Drawing Curve Preview */}
         {isDrawing && activeTool === 'freehand' && freehandPoints.length > 1 && (
           <path
@@ -892,7 +945,7 @@ export const Workspace: React.FC = () => {
         <GuidelinesOverlay />
 
         {/* Interactive Transform Gizmo (offset by active page position) */}
-        {(activeTool === 'pick' || activeTool === 'freehand-pick') && (
+        {(activeTool === 'pick' || activeTool === 'freehand-pick') && !editingTextId && (
           <g transform={`translate(${activePagePos?.offsetX || 0}, 0)`}>
             <TransformGizmo onStartTransform={handleStartTransform} />
           </g>
@@ -930,6 +983,50 @@ export const Workspace: React.FC = () => {
           />
         )}
       </svg>
+
+      {/* Live In-Place On-Canvas Textarea Overlay */}
+      {editingObject && editingObject.textProps && (
+        <div
+          className="absolute z-50 pointer-events-auto"
+          style={{
+            left: `${((activePagePos?.offsetX || 0) + editingObject.transform.x) * zoom + pan.x}px`,
+            top: `${editingObject.transform.y * zoom + pan.y}px`,
+          }}
+        >
+          <div className="relative">
+            <textarea
+              ref={inlineTextRef}
+              value={editingObject.textProps.text}
+              onChange={e => {
+                updateObject(editingObject.id, {
+                  textProps: { ...editingObject.textProps!, text: e.target.value },
+                });
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) {
+                  e.preventDefault();
+                  setEditingTextId(null);
+                }
+              }}
+              rows={Math.max(1, editingObject.textProps.text.split('\n').length)}
+              style={{
+                fontFamily: `"${editingObject.textProps.fontFamily}", sans-serif`,
+                fontSize: `${editingObject.textProps.fontSize * zoom}px`,
+                fontWeight: editingObject.textProps.fontWeight,
+                color: editingObject.fill.color !== 'none' ? editingObject.fill.color : '#ffffff',
+                lineHeight: editingObject.textProps.lineHeight || 1.2,
+                minWidth: `${Math.max(150, editingObject.transform.width) * zoom}px`,
+              }}
+              className="bg-black/60 backdrop-blur-sm border-2 border-blue-500 rounded-lg px-2 py-1 outline-none text-white shadow-2xl resize-both overflow-hidden"
+              placeholder="Type text..."
+            />
+            <div className="absolute -top-6 right-0 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow flex items-center gap-1">
+              <span>Press Enter or Esc to finish</span>
+              <Check size={10} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Horizontal & Vertical Sideway Navigation Controls */}
       <div className="absolute bottom-3 left-4 z-40 flex items-center gap-1.5 bg-[#1e222d]/90 backdrop-blur-md border border-gray-700/60 rounded-xl p-1.5 shadow-2xl text-xs text-gray-300">

@@ -16,6 +16,7 @@ import {
   Bold,
   Italic,
   Underline,
+  Strikethrough,
   Plus,
   Minus,
   Sparkles,
@@ -25,21 +26,54 @@ import {
   Square,
   Star,
   Hexagon,
+  Palette,
+  Pipette,
+  Sliders,
 } from 'lucide-react';
 import { BooleanOp } from '../../engine/booleanOps';
 import { ARTISTIC_BRUSH_PRESETS } from '../../engine/artisticMediaEngine';
+import { loadGoogleFont } from '../../engine/googleFontsLibrary';
 
 const FONT_FAMILIES = [
   'Inter',
-  'Outfit',
   'Montserrat',
-  'Bebas Neue',
-  'Cinzel',
   'Playfair Display',
+  'Bebas Neue',
+  'Outfit',
+  'Cinzel',
   'Space Grotesk',
   'JetBrains Mono',
+  'Oswald',
+  'Lora',
+  'Caveat',
+  'Pacifico',
+  'Syne',
+  'Righteous',
+  'Poppins',
+  'Roboto',
   'sans-serif',
   'serif',
+  'monospace',
+];
+
+const FONT_WEIGHTS = [
+  { label: 'Thin (100)', value: 100 },
+  { label: 'Light (300)', value: 300 },
+  { label: 'Regular (400)', value: 400 },
+  { label: 'Medium (500)', value: 500 },
+  { label: 'Semi-Bold (600)', value: 600 },
+  { label: 'Bold (700)', value: 700 },
+  { label: 'Extra-Bold (800)', value: 800 },
+  { label: 'Black (900)', value: 900 },
+];
+
+const STROKE_WIDTH_PRESETS = [
+  { label: 'Hairline', value: 0.5 },
+  { label: '1 pt', value: 1 },
+  { label: '2 pt', value: 2 },
+  { label: '4 pt', value: 4 },
+  { label: '8 pt', value: 8 },
+  { label: '16 pt', value: 16 },
 ];
 
 export const DynamicPropertyBar: React.FC = () => {
@@ -59,6 +93,12 @@ export const DynamicPropertyBar: React.FC = () => {
     bringToFront,
     sendToBack,
     selectionBounds,
+    activeFillColor,
+    setActiveFillColor,
+    activeOutlineColor,
+    setActiveOutlineColor,
+    activeOutlineWidth,
+    setActiveOutlineWidth,
     activeBrushPreset,
     setActiveBrushPreset,
     activeBrushWidth,
@@ -74,7 +114,7 @@ export const DynamicPropertyBar: React.FC = () => {
     const currentPreset = ARTISTIC_BRUSH_PRESETS.find(p => p.id === activeBrushPreset) || ARTISTIC_BRUSH_PRESETS[0];
 
     return (
-      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[36px] overflow-x-auto text-gray-300">
+      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[38px] overflow-x-auto text-gray-300">
         <span className="font-semibold text-emerald-400 uppercase text-[10px] tracking-wider flex items-center">
           <Sparkles className="w-3.5 h-3.5 mr-1" /> Artistic Media:
         </span>
@@ -93,7 +133,7 @@ export const DynamicPropertyBar: React.FC = () => {
                 setActiveBrushSmoothing(selected.smoothing);
               }
             }}
-            className="bg-[#262e3d] text-white px-2 py-0.5 rounded border border-[#374151] outline-none font-medium"
+            className="bg-[#262e3d] text-white px-2 py-1 rounded border border-[#374151] outline-none font-medium"
           >
             <optgroup label="✒️ Calligraphic & Presets">
               {ARTISTIC_BRUSH_PRESETS.filter(p => p.category === 'calligraphic' || p.category === 'preset').map(p => (
@@ -118,212 +158,113 @@ export const DynamicPropertyBar: React.FC = () => {
           <span className="text-gray-400">Width:</span>
           <input
             type="number"
-            min={1}
-            max={120}
             value={activeBrushWidth}
             onChange={e => setActiveBrushWidth(Math.max(1, Number(e.target.value)))}
-            className="w-14 bg-[#262e3d] text-white px-1.5 py-0.5 rounded border border-[#374151] outline-none text-right font-mono"
+            className="w-12 bg-[#262e3d] text-white px-1.5 py-1 rounded border border-[#374151] outline-none text-right font-mono"
           />
-          <span className="text-gray-500">px</span>
+          <span className="text-gray-400">px</span>
         </div>
 
-        {/* Angle (for Calligraphic) */}
+        {/* Calligraphic Angle */}
         {currentPreset.category === 'calligraphic' && (
-          <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
-            <span className="text-gray-400">Nib Angle:</span>
+          <div className="flex items-center space-x-1">
+            <span className="text-gray-400">Angle:</span>
             <input
-              type="range"
-              min={0}
-              max={180}
+              type="number"
               value={activeBrushAngle}
               onChange={e => setActiveBrushAngle(Number(e.target.value))}
-              className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
+              className="w-12 bg-[#262e3d] text-white px-1.5 py-1 rounded border border-[#374151] outline-none text-right font-mono"
             />
-            <span className="text-white font-mono">{activeBrushAngle}°</span>
+            <span className="text-gray-400">°</span>
           </div>
         )}
 
         {/* Smoothing */}
-        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
+        <div className="flex items-center space-x-1">
           <span className="text-gray-400">Smoothing:</span>
-          <input
-            type="range"
-            min={0.1}
-            max={0.95}
-            step={0.05}
-            value={activeBrushSmoothing}
-            onChange={e => setActiveBrushSmoothing(Number(e.target.value))}
-            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
-          />
-          <span className="text-white font-mono">{Math.round(activeBrushSmoothing * 100)}%</span>
-        </div>
-
-        <span className="text-gray-500 text-[11px] italic hidden xl:inline">
-          {currentPreset.description}
-        </span>
-      </div>
-    );
-  }
-
-  // 2025 Painterly Brush Property Ribbon
-  if (activeTool === 'painterly-brush') {
-    const { painterlySettings, setPainterlySettings } = useCorel();
-
-    return (
-      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[36px] overflow-x-auto text-gray-300">
-        <span className="font-semibold text-cyan-400 uppercase text-[10px] tracking-wider flex items-center">
-          <Sparkles className="w-3.5 h-3.5 mr-1" /> Painterly Brush 2025:
-        </span>
-
-        {/* Media Type */}
-        <div className="flex items-center space-x-1.5">
-          <span className="text-gray-400">Media:</span>
-          <select
-            value={painterlySettings.mediaType}
-            onChange={e => setPainterlySettings(p => ({ ...p, mediaType: e.target.value as any }))}
-            className="bg-[#262e3d] text-white px-2 py-0.5 rounded border border-[#374151] outline-none font-medium capitalize"
-          >
-            <option value="watercolor">🌊 Watercolor Wash</option>
-            <option value="pastel">🖍️ Dry Pastel & Chalk</option>
-            <option value="acrylic">🎨 Impasto Acrylic</option>
-            <option value="oil">🖌️ Fine Oil Paint</option>
-            <option value="wet-blend">💨 Wet Blend Smudge</option>
-            <option value="calligraphy">✒️ Calligraphic Chisel</option>
-            <option value="spray">✨ Splatter Mist</option>
-          </select>
-        </div>
-
-        {/* Brush Size */}
-        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
-          <span className="text-gray-400">Size:</span>
-          <input
-            type="range"
-            min={4}
-            max={100}
-            value={painterlySettings.size}
-            onChange={e => setPainterlySettings(p => ({ ...p, size: Number(e.target.value) }))}
-            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
-          />
-          <span className="text-white font-mono">{painterlySettings.size}px</span>
-        </div>
-
-        {/* Opacity */}
-        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
-          <span className="text-gray-400">Opacity:</span>
-          <input
-            type="range"
-            min={0.1}
-            max={1.0}
-            step={0.05}
-            value={painterlySettings.opacity}
-            onChange={e => setPainterlySettings(p => ({ ...p, opacity: Number(e.target.value) }))}
-            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
-          />
-          <span className="text-white font-mono">{Math.round(painterlySettings.opacity * 100)}%</span>
-        </div>
-
-        {/* Wetness */}
-        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
-          <span className="text-gray-400">Wetness:</span>
           <input
             type="range"
             min={0}
             max={100}
-            value={painterlySettings.wetness}
-            onChange={e => setPainterlySettings(p => ({ ...p, wetness: Number(e.target.value) }))}
-            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
+            value={activeBrushSmoothing}
+            onChange={e => setActiveBrushSmoothing(Number(e.target.value))}
+            className="w-20 accent-emerald-500 h-1.5 bg-gray-700 rounded cursor-pointer"
           />
-          <span className="text-white font-mono">{painterlySettings.wetness}%</span>
+          <span className="text-gray-400 font-mono text-[10px]">{activeBrushSmoothing}%</span>
         </div>
-
-        <span className="text-cyan-400/80 text-[10px] font-mono border border-cyan-800/40 px-2 py-0.5 rounded-full">
-          Stylus Tilt Active
-        </span>
       </div>
     );
   }
 
-  // Page Property Bar (When nothing is selected)
-  if (selectedObjects.length === 0) {
+  // If no object is selected, show Page properties
+  if (selectedObjects.length === 0 || !primarySelectedObject) {
     return (
-      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[36px] overflow-x-auto text-gray-300">
-        <span className="font-semibold text-gray-400 uppercase text-[10px] tracking-wider">Page Setup:</span>
-        
-        {/* Preset */}
+      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[38px] overflow-x-auto text-gray-300">
+        <span className="font-semibold text-blue-400 uppercase text-[10px] tracking-wider">
+          Page Setup:
+        </span>
+
+        {/* Page Name */}
         <div className="flex items-center space-x-1">
-          <span className="text-gray-400">Preset:</span>
-          <select
-            value={activePage.preset}
-            onChange={e => {
-              const val = e.target.value;
-              let w = activePage.width;
-              let h = activePage.height;
-              if (val === 'A4 Standard') { w = 1000; h = 750; }
-              else if (val === 'A3 Poster') { w = 1400; h = 990; }
-              else if (val === '1080p FHD') { w = 1920; h = 1080; }
-              else if (val === 'Business Card') { w = 1050; h = 600; }
-              else if (val === 'Square Post') { w = 800; h = 800; }
-              updateActivePage({ preset: val, width: w, height: h });
-            }}
-            className="bg-[#262e3d] text-white px-2 py-0.5 rounded border border-[#374151] outline-none"
-          >
-            <option value="A4 Standard">A4 Standard (1000 × 750)</option>
-            <option value="A3 Poster">A3 Poster (1400 × 990)</option>
-            <option value="1080p FHD">1080p Full HD (1920 × 1080)</option>
-            <option value="Business Card">Business Card (1050 × 600)</option>
-            <option value="Square Post">Square Emblem (800 × 800)</option>
-            <option value="Custom">Custom Size</option>
-          </select>
+          <span className="text-gray-400">Name:</span>
+          <input
+            type="text"
+            value={activePage.name}
+            onChange={e => updateActivePage({ name: e.target.value })}
+            className="w-24 bg-[#262e3d] text-white px-1.5 py-0.5 rounded border border-[#374151] outline-none"
+          />
         </div>
 
         {/* Width & Height */}
         <div className="flex items-center space-x-1">
-          <span className="text-gray-400">W:</span>
+          <span className="text-gray-400 font-mono">W:</span>
           <input
             type="number"
             value={activePage.width}
-            onChange={e => updateActivePage({ width: Math.max(100, Number(e.target.value)), preset: 'Custom' })}
+            onChange={e => updateActivePage({ width: Math.max(50, Number(e.target.value)) })}
             className="w-16 bg-[#262e3d] text-white px-1.5 py-0.5 rounded border border-[#374151] outline-none text-right font-mono"
           />
-          <span className="text-gray-400">H:</span>
+          <span className="text-gray-400 font-mono">H:</span>
           <input
             type="number"
             value={activePage.height}
-            onChange={e => updateActivePage({ height: Math.max(100, Number(e.target.value)), preset: 'Custom' })}
+            onChange={e => updateActivePage({ height: Math.max(50, Number(e.target.value)) })}
             className="w-16 bg-[#262e3d] text-white px-1.5 py-0.5 rounded border border-[#374151] outline-none text-right font-mono"
           />
-          <span className="text-gray-500">{activePage.unit}</span>
+          <span className="text-gray-400">{activePage.unit}</span>
         </div>
 
-        {/* Orientation */}
+        {/* Orientation Toggle */}
         <div className="flex items-center space-x-1 bg-[#262e3d] p-0.5 rounded border border-[#374151]">
           <button
             onClick={() => {
               if (activePage.orientation !== 'portrait') {
                 updateActivePage({
                   orientation: 'portrait',
-                  width: activePage.height,
-                  height: activePage.width,
+                  width: Math.min(activePage.width, activePage.height),
+                  height: Math.max(activePage.width, activePage.height),
                 });
               }
             }}
-            className={`px-2 py-0.5 rounded ${activePage.orientation === 'portrait' ? 'bg-[#3b82f6] text-white font-bold' : 'text-gray-400 hover:text-white'}`}
+            title="Portrait Orientation"
+            className={`p-1 rounded ${activePage.orientation === 'portrait' ? 'bg-[#3b82f6] text-white font-bold' : 'text-gray-400 hover:text-white'}`}
           >
-            Portrait
+            <Square className="w-3.5 h-3.5 rotate-90" />
           </button>
           <button
             onClick={() => {
               if (activePage.orientation !== 'landscape') {
                 updateActivePage({
                   orientation: 'landscape',
-                  width: activePage.height,
-                  height: activePage.width,
+                  width: Math.max(activePage.width, activePage.height),
+                  height: Math.min(activePage.width, activePage.height),
                 });
               }
             }}
-            className={`px-2 py-0.5 rounded ${activePage.orientation === 'landscape' ? 'bg-[#3b82f6] text-white font-bold' : 'text-gray-400 hover:text-white'}`}
+            title="Landscape Orientation"
+            className={`p-1 rounded ${activePage.orientation === 'landscape' ? 'bg-[#3b82f6] text-white font-bold' : 'text-gray-400 hover:text-white'}`}
           >
-            Landscape
+            <Square className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -332,7 +273,7 @@ export const DynamicPropertyBar: React.FC = () => {
           <span className="text-gray-400">Page Color:</span>
           <input
             type="color"
-            value={activePage.background.startsWith('#') ? activePage.background : '#ffffff'}
+            value={activePage.background || '#ffffff'}
             onChange={e => updateActivePage({ background: e.target.value })}
             className="w-6 h-6 rounded border border-[#374151] cursor-pointer bg-transparent"
           />
@@ -341,11 +282,12 @@ export const DynamicPropertyBar: React.FC = () => {
     );
   }
 
-  const primary = primarySelectedObject!;
+  // Selected Object Properties
+  const primary = primarySelectedObject;
   const { x, y, width, height, rotation } = primary.transform;
 
   return (
-    <div className="bg-[#1b2029] border-b border-[#2d3748] px-2 py-1 flex items-center space-x-3 text-xs select-none min-h-[36px] overflow-x-auto text-gray-200">
+    <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-3 text-xs select-none min-h-[38px] overflow-x-auto text-gray-300">
       {/* Position X / Y */}
       <div className="flex items-center space-x-1">
         <span className="text-gray-400 font-mono">X:</span>
@@ -386,7 +328,7 @@ export const DynamicPropertyBar: React.FC = () => {
 
       <div className="h-4 w-[1px] bg-[#374151]" />
 
-      {/* Rotation */}
+      {/* Rotation & Flip */}
       <div className="flex items-center space-x-1">
         <RotateCw className="w-3.5 h-3.5 text-gray-400" />
         <input
@@ -398,7 +340,6 @@ export const DynamicPropertyBar: React.FC = () => {
         <span className="text-gray-400">°</span>
       </div>
 
-      {/* Flip Horizontal / Vertical */}
       <div className="flex items-center space-x-0.5">
         <button
           onClick={() => updateSelectedObjects({ transform: { ...primary.transform, scaleX: (primary.transform.scaleX || 1) * -1 } })}
@@ -418,107 +359,177 @@ export const DynamicPropertyBar: React.FC = () => {
 
       <div className="h-4 w-[1px] bg-[#374151]" />
 
-      {/* Shape-Specific Dynamic Properties */}
-      {primary.type === 'rect' && (
-        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
-          <span className="text-[11px] text-gray-400">Corner Radius:</span>
+      {/* Live Fill & Outline Swatches */}
+      <div className="flex items-center space-x-2 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
+        <div className="flex items-center space-x-1" title="Fill Color">
+          <span className="text-[10px] text-gray-400 uppercase font-bold">Fill:</span>
           <input
-            type="number"
-            value={primary.rectProps?.cornerRadii[0] || 0}
+            type="color"
+            value={primary.fill.color !== 'none' ? primary.fill.color : '#ffffff'}
             onChange={e => {
-              const r = Math.max(0, Number(e.target.value));
-              updateObject(primary.id, { rectProps: { cornerRadii: [r, r, r, r], isRoundedLinked: true } });
+              updateSelectedObjects({ fill: { ...primary.fill, type: 'solid', color: e.target.value } });
+              setActiveFillColor(e.target.value);
             }}
-            className="w-12 bg-[#1b2029] text-white px-1 py-0.5 rounded border border-[#374151] outline-none text-right font-mono"
+            className="w-5 h-5 rounded border border-gray-600 cursor-pointer bg-transparent"
           />
         </div>
-      )}
 
-      {primary.type === 'polygon' && (
-        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
-          <Hexagon className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-[11px] text-gray-400">Sides:</span>
+        <div className="flex items-center space-x-1" title="Outline Color & Width">
+          <span className="text-[10px] text-gray-400 uppercase font-bold">Line:</span>
           <input
-            type="number"
-            min={3}
-            max={32}
-            value={primary.polygonProps?.sides || 5}
+            type="color"
+            value={primary.outline.color !== 'none' ? primary.outline.color : '#000000'}
             onChange={e => {
-              const sides = Math.min(32, Math.max(3, Number(e.target.value)));
-              updateObject(primary.id, { polygonProps: { sides } });
+              updateSelectedObjects({ outline: { ...primary.outline, color: e.target.value } });
+              setActiveOutlineColor(e.target.value);
             }}
-            className="w-10 bg-[#1b2029] text-white px-1 py-0.5 rounded border border-[#374151] outline-none text-right font-mono"
+            className="w-5 h-5 rounded border border-gray-600 cursor-pointer bg-transparent"
           />
+          <select
+            value={primary.outline.width || 1}
+            onChange={e => {
+              const w = Number(e.target.value);
+              updateSelectedObjects({ outline: { ...primary.outline, width: w } });
+              setActiveOutlineWidth(w);
+            }}
+            className="bg-[#1b2029] text-white px-1 py-0.5 rounded text-[10px] font-mono border border-gray-700 outline-none"
+          >
+            {STROKE_WIDTH_PRESETS.map(sw => (
+              <option key={sw.value} value={sw.value}>{sw.label}</option>
+            ))}
+          </select>
         </div>
-      )}
+      </div>
 
-      {primary.type === 'star' && (
-        <div className="flex items-center space-x-2 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
-          <Star className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-[11px] text-gray-400">Points:</span>
-          <input
-            type="number"
-            min={3}
-            max={32}
-            value={primary.starProps?.points || 5}
-            onChange={e => updateObject(primary.id, { starProps: { ...primary.starProps!, points: Number(e.target.value) } })}
-            className="w-10 bg-[#1b2029] text-white px-1 py-0.5 rounded border border-[#374151] outline-none text-right font-mono"
-          />
-          <span className="text-[11px] text-gray-400">Depth:</span>
-          <input
-            type="range"
-            min={0.1}
-            max={0.9}
-            step={0.05}
-            value={primary.starProps?.sharpness || 0.5}
-            onChange={e => updateObject(primary.id, { starProps: { ...primary.starProps!, sharpness: Number(e.target.value) } })}
-            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
-          />
-        </div>
-      )}
+      <div className="h-4 w-[1px] bg-[#374151]" />
 
-      {/* Typography Properties */}
+      {/* TYPOGRAPHY SPECIFIC CONTROLS */}
       {primary.type === 'text' && primary.textProps && (
-        <div className="flex items-center space-x-1.5">
-          {/* Direct Text Content Input */}
+        <div className="flex items-center space-x-2">
+          {/* Direct Text String Editor */}
           <div className="flex items-center space-x-1 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
-            <span className="text-[10px] text-gray-400 font-bold uppercase">Text:</span>
+            <span className="text-[10px] text-emerald-400 font-bold uppercase">Text:</span>
             <input
               type="text"
               value={primary.textProps.text}
               onChange={e => updateObject(primary.id, { textProps: { ...primary.textProps!, text: e.target.value } })}
-              className="w-36 bg-[#1b2029] text-white px-1.5 py-0.5 rounded border border-gray-700 outline-none font-medium text-xs"
+              className="w-40 bg-[#1b2029] text-white px-1.5 py-0.5 rounded border border-gray-700 outline-none font-medium text-xs"
               placeholder="Edit text..."
             />
           </div>
 
+          {/* Font Family Dropdown */}
           <select
             value={primary.textProps.fontFamily}
-            onChange={e => updateObject(primary.id, { textProps: { ...primary.textProps!, fontFamily: e.target.value } })}
-            className="bg-[#262e3d] text-white px-2 py-0.5 rounded border border-[#374151] outline-none font-medium"
+            onChange={e => {
+              loadGoogleFont(e.target.value);
+              updateObject(primary.id, { textProps: { ...primary.textProps!, fontFamily: e.target.value } });
+            }}
+            className="bg-[#262e3d] text-white px-2 py-0.5 rounded border border-[#374151] outline-none font-medium text-xs"
           >
             {FONT_FAMILIES.map(font => (
               <option key={font} value={font}>{font}</option>
             ))}
           </select>
-          <input
-            type="number"
-            value={primary.textProps.fontSize}
-            onChange={e => updateObject(primary.id, { textProps: { ...primary.textProps!, fontSize: Math.max(6, Number(e.target.value)) } })}
-            className="w-12 bg-[#262e3d] text-white px-1 py-0.5 rounded border border-[#374151] outline-none text-right font-mono"
-          />
+
+          {/* Font Size with Stepper */}
+          <div className="flex items-center space-x-0.5 bg-[#262e3d] px-1 py-0.5 rounded border border-[#374151]">
+            <input
+              type="number"
+              value={primary.textProps.fontSize}
+              onChange={e => updateObject(primary.id, { textProps: { ...primary.textProps!, fontSize: Math.max(6, Number(e.target.value)) } })}
+              className="w-12 bg-[#1b2029] text-white px-1 py-0.5 rounded border border-[#374151] outline-none text-right font-mono text-xs"
+            />
+            <span className="text-[10px] text-gray-400 font-mono px-0.5">pt</span>
+          </div>
+
+          {/* Font Weight Selector */}
+          <select
+            value={primary.textProps.fontWeight || 400}
+            onChange={e => updateObject(primary.id, { textProps: { ...primary.textProps!, fontWeight: Number(e.target.value) } })}
+            className="bg-[#262e3d] text-white px-1.5 py-0.5 rounded border border-[#374151] outline-none text-[11px]"
+          >
+            {FONT_WEIGHTS.map(fw => (
+              <option key={fw.value} value={fw.value}>{fw.label}</option>
+            ))}
+          </select>
+
+          {/* Bold / Italic / Underline / Strikethrough Buttons */}
           <div className="flex items-center bg-[#262e3d] p-0.5 rounded border border-[#374151]">
             <button
-              onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, fontWeight: primary.textProps!.fontWeight === 800 ? 400 : 800 } })}
-              className={`p-1 rounded ${primary.textProps.fontWeight === 800 ? 'bg-[#3b82f6] text-white' : 'text-gray-400 hover:text-white'}`}
+              onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, fontWeight: Number(primary.textProps!.fontWeight || 400) >= 700 ? 400 : 700 } })}
+              title="Bold"
+              className={`p-1 rounded ${Number(primary.textProps.fontWeight) >= 700 ? 'bg-[#3b82f6] text-white' : 'text-gray-400 hover:text-white'}`}
             >
               <Bold className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, fontStyle: primary.textProps!.fontStyle === 'italic' ? 'normal' : 'italic' } })}
+              title="Italic"
               className={`p-1 rounded ${primary.textProps.fontStyle === 'italic' ? 'bg-[#3b82f6] text-white' : 'text-gray-400 hover:text-white'}`}
             >
               <Italic className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, textDecoration: primary.textProps!.textDecoration === 'underline' ? 'none' : 'underline' } })}
+              title="Underline"
+              className={`p-1 rounded ${primary.textProps.textDecoration === 'underline' ? 'bg-[#3b82f6] text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Underline className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Text Alignment */}
+          <div className="flex items-center bg-[#262e3d] p-0.5 rounded border border-[#374151]">
+            <button
+              onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, textAlign: 'left' } })}
+              title="Align Left"
+              className={`p-1 rounded ${primary.textProps.textAlign === 'left' ? 'bg-[#3b82f6] text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              <AlignLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, textAlign: 'center' } })}
+              title="Align Center"
+              className={`p-1 rounded ${primary.textProps.textAlign === 'center' ? 'bg-[#3b82f6] text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              <AlignCenter className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, textAlign: 'right' } })}
+              title="Align Right"
+              className={`p-1 rounded ${primary.textProps.textAlign === 'right' ? 'bg-[#3b82f6] text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              <AlignRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Letter Spacing Tracking */}
+          <div className="flex items-center space-x-1 bg-[#262e3d] px-1.5 py-0.5 rounded border border-[#374151]">
+            <span className="text-[10px] text-gray-400 font-mono">AV:</span>
+            <input
+              type="number"
+              value={primary.textProps.letterSpacing || 0}
+              onChange={e => updateObject(primary.id, { textProps: { ...primary.textProps!, letterSpacing: Number(e.target.value) } })}
+              className="w-10 bg-[#1b2029] text-white px-1 py-0.5 rounded border border-[#374151] outline-none text-right font-mono text-xs"
+            />
+          </div>
+
+          {/* Transform Case */}
+          <div className="flex items-center space-x-0.5 bg-[#262e3d] p-0.5 rounded border border-[#374151]">
+            <button
+              onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, text: primary.textProps!.text.toUpperCase() } })}
+              title="Uppercase (ALL CAPS)"
+              className="px-1.5 py-0.5 hover:bg-gray-700 text-gray-300 rounded font-bold text-[10px]"
+            >
+              AA
+            </button>
+            <button
+              onClick={() => updateObject(primary.id, { textProps: { ...primary.textProps!, text: primary.textProps!.text.toLowerCase() } })}
+              title="Lowercase"
+              className="px-1.5 py-0.5 hover:bg-gray-700 text-gray-300 rounded font-medium text-[10px]"
+            >
+              aa
             </button>
           </div>
         </div>
@@ -528,7 +539,7 @@ export const DynamicPropertyBar: React.FC = () => {
       {primary.type !== 'path' && (
         <button
           onClick={() => convertToCurves(primary.id)}
-          className="px-2 py-0.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 rounded font-medium flex items-center space-x-1"
+          className="px-2 py-0.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 rounded font-medium flex items-center space-x-1 whitespace-nowrap shadow-sm"
           title="Convert to Curves (Ctrl+Q) for Node Editing"
         >
           <Sparkles className="w-3 h-3 text-emerald-400" />

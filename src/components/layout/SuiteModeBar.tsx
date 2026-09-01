@@ -74,7 +74,11 @@ const SUITE_APPS: SuiteAppItem[] = [
   },
 ];
 
-export const SuiteModeBar: React.FC = () => {
+interface SuiteModeBarProps {
+  onToggleCollapse?: () => void;
+}
+
+export const SuiteModeBar: React.FC<SuiteModeBarProps> = ({ onToggleCollapse }) => {
   const {
     suiteAppMode,
     setSuiteAppMode,
@@ -99,12 +103,12 @@ export const SuiteModeBar: React.FC = () => {
   };
 
   return (
-    <div className="h-8 bg-[#111318] border-b border-gray-800 flex items-center justify-between px-3 text-xs select-none">
+    <div className="h-7 bg-[#111318] border-b border-gray-800 flex items-center justify-between px-2 text-xs select-none whitespace-nowrap overflow-x-auto scrollbar-none">
       {/* Left Suite branding and App Switcher pills */}
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
-        <div className="flex items-center gap-1.5 pr-2 border-r border-gray-800">
-          <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 text-[11px] tracking-wider uppercase">
-            CorelDRAW Suite 2025
+      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 pr-2 border-r border-gray-800">
+          <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 text-[10px] tracking-wider uppercase">
+            Corel Suite 2025
           </span>
         </div>
 
@@ -116,7 +120,7 @@ export const SuiteModeBar: React.FC = () => {
                 key={app.id}
                 onClick={() => handleSwitchMode(app.id)}
                 title={app.desc}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium transition-all ${
                   isActive
                     ? `bg-gradient-to-r ${app.color} text-white shadow-md shadow-cyan-500/20 scale-[1.02]`
                     : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/60'
@@ -124,35 +128,40 @@ export const SuiteModeBar: React.FC = () => {
               >
                 <span>{app.icon}</span>
                 <span>{app.name}</span>
-                {isActive && (
-                  <span className="text-[9px] bg-black/30 px-1 py-0.2 rounded font-mono">
-                    Active
-                  </span>
-                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Right Quick Actions (Screen Snip, Cloud Status) */}
-      <div className="flex items-center gap-2">
+      {/* Right Quick Actions (Screen Snip, Prepress & Collapse) */}
+      <div className="flex items-center gap-1.5">
         <button
           onClick={() => triggerScreenCapture('canvas')}
           title="Capture Canvas Snapshot"
-          className="flex items-center gap-1 text-[10px] bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 px-2 py-0.5 rounded-lg transition-colors"
+          className="flex items-center gap-1 text-[9px] bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 px-1.5 py-0.5 rounded transition-colors"
         >
-          <Camera size={12} />
-          <span>CAPTURE Snip</span>
+          <Camera size={11} />
+          <span>CAPTURE</span>
         </button>
 
         <button
           onClick={() => setActiveDockerTab('prepress')}
           title="Prepress & CMYK Separations 2025"
-          className="flex items-center gap-1 text-[10px] bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 border border-blue-800/50 px-2 py-0.5 rounded-lg transition-colors"
+          className="flex items-center gap-1 text-[9px] bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 border border-blue-800/50 px-1.5 py-0.5 rounded transition-colors"
         >
-          <span>🖨️ Prepress 2025</span>
+          <span>🖨️ Prepress</span>
         </button>
+
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            title="Collapse Suite Bar (Compact Screen Mode)"
+            className="p-1 hover:bg-gray-800 text-gray-500 hover:text-gray-300 rounded text-[10px]"
+          >
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );

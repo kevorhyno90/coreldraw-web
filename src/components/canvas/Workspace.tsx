@@ -216,6 +216,22 @@ export const Workspace: React.FC = () => {
     }
   }, [editingTextId]);
 
+  // Auto-fit canvas to screen on initial mount and on window resize
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      zoomToFit();
+    }, 150);
+
+    const handleResize = () => {
+      zoomToFit();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [zoomToFit]);
+
   // Convert Screen (Client) coords to Canvas space coords
   const screenToCanvas = useCallback(
     (clientX: number, clientY: number): Point2D => {

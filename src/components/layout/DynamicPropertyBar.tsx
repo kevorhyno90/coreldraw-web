@@ -119,7 +119,7 @@ export const DynamicPropertyBar: React.FC = () => {
     const currentPreset = ARTISTIC_BRUSH_PRESETS.find(p => p.id === activeBrushPreset) || ARTISTIC_BRUSH_PRESETS[0];
 
     return (
-      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[38px] overflow-x-auto text-gray-300">
+      <div className="bg-[#1b2029] border-b border-[#2d3748] px-2 py-0.5 flex items-center space-x-3 text-xs select-none h-8 whitespace-nowrap overflow-x-auto scrollbar-none text-gray-300">
         <span className="font-semibold text-emerald-400 uppercase text-[10px] tracking-wider flex items-center">
           <Sparkles className="w-3.5 h-3.5 mr-1" /> Artistic Media:
         </span>
@@ -204,7 +204,7 @@ export const DynamicPropertyBar: React.FC = () => {
   // If no object is selected, show Page properties
   if (selectedObjects.length === 0 || !primarySelectedObject) {
     return (
-      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[38px] overflow-x-auto text-gray-300">
+      <div className="bg-[#1b2029] border-b border-[#2d3748] px-2 py-0.5 flex items-center space-x-3 text-xs select-none h-8 whitespace-nowrap overflow-x-auto scrollbar-none text-gray-300">
         <span className="font-semibold text-blue-400 uppercase text-[10px] tracking-wider">
           Page Setup:
         </span>
@@ -292,7 +292,7 @@ export const DynamicPropertyBar: React.FC = () => {
   const { x, y, width, height, rotation } = primary.transform;
 
   return (
-    <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-3 text-xs select-none min-h-[38px] overflow-x-auto text-gray-300">
+    <div className="bg-[#1b2029] border-b border-[#2d3748] px-2 py-0.5 flex items-center space-x-2.5 text-xs select-none h-8 whitespace-nowrap overflow-x-auto scrollbar-none text-gray-300">
       {/* Position X / Y */}
       <div className="flex items-center space-x-1">
         <span className="text-gray-400 font-mono">X:</span>

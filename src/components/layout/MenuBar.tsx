@@ -29,7 +29,12 @@ import {
 import { exportToCorelJson, exportToSvgFile, printDocument } from '../../engine/exportEngine';
 import { parseSvgToCorelObjects } from '../../engine/svgEngine';
 
-export const MenuBar: React.FC = () => {
+interface MenuBarProps {
+  onToggleSuiteBar?: () => void;
+  isSuiteBarVisible?: boolean;
+}
+
+export const MenuBar: React.FC<MenuBarProps> = ({ onToggleSuiteBar, isSuiteBarVisible = true }) => {
   const {
     projectTitle,
     setProjectTitle,
@@ -320,10 +325,10 @@ export const MenuBar: React.FC = () => {
                 </button>
                 <button
                   onClick={() => { zoomToFit(); setActiveMenu(null); }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between"
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between font-semibold text-amber-300"
                 >
-                  <span className="flex items-center"><Maximize className="w-3.5 h-3.5 mr-2 text-amber-400" /> Zoom to Fit Page</span>
-                  <span className="text-gray-500 text-[10px]">F4</span>
+                  <span className="flex items-center"><Maximize className="w-3.5 h-3.5 mr-2" /> Fit to Screen (Auto-Scale)</span>
+                  <span className="text-gray-400 font-mono text-[10px]">F4</span>
                 </button>
                 <button
                   onClick={() => { zoomToSelection(); setActiveMenu(null); }}
@@ -332,6 +337,15 @@ export const MenuBar: React.FC = () => {
                   <span className="flex items-center"><Maximize2 className="w-3.5 h-3.5 mr-2 text-purple-400" /> Zoom to Selection</span>
                   <span className="text-gray-500 text-[10px]">Shift+F2</span>
                 </button>
+                {onToggleSuiteBar && (
+                  <button
+                    onClick={() => { onToggleSuiteBar(); setActiveMenu(null); }}
+                    className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between text-cyan-300"
+                  >
+                    <span>{isSuiteBarVisible ? 'Collapse Top Suite Bar' : 'Show Top Suite Bar'}</span>
+                    <span className="text-[10px] bg-cyan-950 text-cyan-400 px-1 rounded">Compact</span>
+                  </button>
+                )}
                 <div className="border-t border-[#374151] my-1" />
                 <button
                   onClick={() => {

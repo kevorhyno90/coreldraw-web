@@ -74,7 +74,7 @@ export const StandardToolbar: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#242b38] border-b border-[#2d3748] px-2 py-1 flex items-center justify-between text-xs select-none">
+    <div className="bg-[#242b38] border-b border-[#2d3748] px-2 py-0.5 flex items-center justify-between text-xs select-none h-8 whitespace-nowrap overflow-x-auto scrollbar-none">
       <input
         type="file"
         ref={fileInputRef}

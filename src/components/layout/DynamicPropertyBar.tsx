@@ -480,6 +480,18 @@ export const DynamicPropertyBar: React.FC = () => {
       {/* Typography Properties */}
       {primary.type === 'text' && primary.textProps && (
         <div className="flex items-center space-x-1.5">
+          {/* Direct Text Content Input */}
+          <div className="flex items-center space-x-1 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
+            <span className="text-[10px] text-gray-400 font-bold uppercase">Text:</span>
+            <input
+              type="text"
+              value={primary.textProps.text}
+              onChange={e => updateObject(primary.id, { textProps: { ...primary.textProps!, text: e.target.value } })}
+              className="w-36 bg-[#1b2029] text-white px-1.5 py-0.5 rounded border border-gray-700 outline-none font-medium text-xs"
+              placeholder="Edit text..."
+            />
+          </div>
+
           <select
             value={primary.textProps.fontFamily}
             onChange={e => updateObject(primary.id, { textProps: { ...primary.textProps!, fontFamily: e.target.value } })}

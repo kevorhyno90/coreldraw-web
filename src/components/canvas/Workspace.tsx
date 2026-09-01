@@ -235,6 +235,41 @@ export const Workspace: React.FC = () => {
     setDrawStart(canvasPt);
     setIsDrawing(true);
 
+    if (activeTool === 'text') {
+      const currentOffsetX = activePagePos?.offsetX || 0;
+      const newText = addObject({
+        name: `Text ${activeObjects.length + 1}`,
+        type: 'text',
+        transform: {
+          x: canvasPt.x - currentOffsetX,
+          y: canvasPt.y - 20,
+          width: 250,
+          height: 50,
+          rotation: 0,
+          scaleX: 1,
+          scaleY: 1,
+          skewX: 0,
+          skewY: 0,
+        },
+        textProps: {
+          text: 'CorelDRAW 2025',
+          fontFamily: 'Montserrat',
+          fontSize: 36,
+          fontWeight: 700,
+          fontStyle: 'normal',
+          textDecoration: 'none',
+          textAlign: 'left',
+          letterSpacing: 0,
+          lineHeight: 1.2,
+        },
+        fill: { type: 'solid', color: activeFillColor },
+        outline: { color: 'none', width: 0, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
+      });
+      setSelectedIds([newText.id]);
+      setActiveTool('pick');
+      return;
+    }
+
     if (activeTool === 'freehand' || activeTool === 'artistic-media') {
       setFreehandPoints([canvasPt]);
     } else if (activeTool === 'painterly-brush') {
@@ -663,6 +698,35 @@ export const Workspace: React.FC = () => {
                         />
                       )}
 
+                      {/* 3D Extruded Layers for Typography */}
+                      {obj.type === 'text' && obj.textProps && obj.extrude?.enabled && (
+                        <g opacity="0.85">
+                          {Array.from({ length: Math.min(15, Math.max(2, Math.floor(obj.extrude.depth / 2))) }).map((_, exIdx) => {
+                            const rad = ((obj.extrude.angle || 45) * Math.PI) / 180;
+                            const offsetStep = exIdx + 1;
+                            const exX = Math.cos(rad) * offsetStep * 1.5;
+                            const exY = Math.sin(rad) * offsetStep * 1.5;
+                            return (
+                              <text
+                                key={`text_ex_${exIdx}`}
+                                x={exX}
+                                y={obj.textProps!.fontSize + exY}
+                                fontFamily={obj.textProps!.fontFamily}
+                                fontSize={obj.textProps!.fontSize}
+                                fontWeight={obj.textProps!.fontWeight}
+                                fontStyle={obj.textProps!.fontStyle}
+                                fill={obj.extrude.sideColor || '#1e293b'}
+                                stroke="none"
+                                textAnchor={obj.textProps!.textAlign === 'center' ? 'middle' : obj.textProps!.textAlign === 'right' ? 'end' : 'start'}
+                                letterSpacing={obj.textProps!.letterSpacing}
+                              >
+                                {obj.textProps!.text}
+                              </text>
+                            );
+                          })}
+                        </g>
+                      )}
+
                       {obj.type === 'text' && obj.textProps && (
                         <text
                           x={0}
@@ -676,6 +740,14 @@ export const Workspace: React.FC = () => {
                           strokeWidth={strokeWidth}
                           textAnchor={obj.textProps.textAlign === 'center' ? 'middle' : obj.textProps.textAlign === 'right' ? 'end' : 'start'}
                           letterSpacing={obj.textProps.letterSpacing}
+                          filter={obj.shadow?.enabled && !isWireframe ? 'url(#canvas-shadow)' : undefined}
+                          onDoubleClick={e => {
+                            e.stopPropagation();
+                            const newText = window.prompt('Edit Text:', obj.textProps!.text);
+                            if (newText !== null) {
+                              updateObject(obj.id, { textProps: { ...obj.textProps!, text: newText } });
+                            }
+                          }}
                         >
                           {obj.textProps.text}
                         </text>

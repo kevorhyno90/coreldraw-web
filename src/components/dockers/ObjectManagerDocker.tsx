@@ -93,7 +93,7 @@ export const ObjectManagerDocker: React.FC = () => {
                 <span className="truncate text-[11px]">{obj.name}</span>
               </div>
 
-              {/* Right toggles (Visibility & Lock) */}
+              {/* Right toggles (Visibility, Lock & Delete) */}
               <div className="flex items-center space-x-1" onClick={e => e.stopPropagation()}>
                 {/* Visibility */}
                 <button
@@ -111,6 +111,18 @@ export const ObjectManagerDocker: React.FC = () => {
                   className="p-0.5 rounded hover:bg-black/20 text-gray-400 hover:text-white"
                 >
                   {obj.locked ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Unlock className="w-3.5 h-3.5" />}
+                </button>
+
+                {/* Direct Delete */}
+                <button
+                  onClick={() => {
+                    setSelectedIds([obj.id]);
+                    deleteSelected();
+                  }}
+                  title="Delete Object"
+                  className="p-0.5 rounded hover:bg-red-500/30 text-gray-400 hover:text-red-400"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>

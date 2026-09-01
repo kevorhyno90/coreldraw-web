@@ -21,6 +21,7 @@ import {
   Layers,
   SlidersHorizontal,
   Type,
+  Trash2,
 } from 'lucide-react';
 import { exportToCorelJson } from '../../engine/exportEngine';
 import { parseSvgToCorelObjects } from '../../engine/svgEngine';
@@ -140,6 +141,13 @@ export const StandardToolbar: React.FC = () => {
           className="p-1 hover:bg-[#323c4d] text-gray-300 hover:text-white rounded"
         >
           <Copy className="w-4 h-4 text-indigo-400" />
+        </button>
+        <button
+          onClick={deleteSelected}
+          title="Delete Selected Objects (Delete / Backspace)"
+          className="p-1 hover:bg-rose-950/60 hover:text-rose-400 text-gray-400 rounded transition-colors"
+        >
+          <Trash2 className="w-4 h-4 text-rose-400" />
         </button>
         <button
           disabled={!canUndo}

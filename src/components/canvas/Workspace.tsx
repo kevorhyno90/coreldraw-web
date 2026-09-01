@@ -7,6 +7,7 @@ import { TransformGizmo } from './TransformGizmo';
 import { NodeEditGizmo } from './NodeEditGizmo';
 import { InteractiveGradientGizmo } from './InteractiveGradientGizmo';
 import { MediaTray } from './MediaTray';
+import { ContextMenu } from './ContextMenu';
 import {
   subpathsToSvgPathData,
   rectToSubpaths,
@@ -100,6 +101,7 @@ export const Workspace: React.FC = () => {
 
   // Live on-canvas text inline editing
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [isShiftKeyHeld, setIsShiftKeyHeld] = useState(false);
   const [isCtrlKeyHeld, setIsCtrlKeyHeld] = useState(false);
 
@@ -882,6 +884,22 @@ export const Workspace: React.FC = () => {
                     key={obj.id}
                     transform={`translate(${x}, ${y})`}
                     onClick={e => handleObjectClick(e, obj, page.id)}
+                    onDoubleClick={e => {
+                      e.stopPropagation();
+                      if (obj.type === 'text') {
+                        setEditingTextId(obj.id);
+                      } else {
+                        setActiveTool('shape');
+                      }
+                    }}
+                    onContextMenu={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!selectedIds.includes(obj.id)) {
+                        setSelectedIds([obj.id]);
+                      }
+                      setContextMenuPos({ x: e.clientX, y: e.clientY });
+                    }}
                     className="cursor-pointer"
                   >
                     <g transform={transformAttr}>
@@ -1211,6 +1229,20 @@ export const Workspace: React.FC = () => {
 
       {/* Floating On-Canvas Media Tray for 2025 Painterly Brushes */}
       <MediaTray />
+
+      {/* Right-Click Object / Canvas Context Menu */}
+      {contextMenuPos && (
+        <ContextMenu
+          x={contextMenuPos.x}
+          y={contextMenuPos.y}
+          onClose={() => setContextMenuPos(null)}
+          onEditText={() => {
+            if (primarySelectedObject?.type === 'text') {
+              setEditingTextId(primarySelectedObject.id);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

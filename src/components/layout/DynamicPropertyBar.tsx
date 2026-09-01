@@ -29,6 +29,8 @@ import {
   Palette,
   Pipette,
   Sliders,
+  Trash2,
+  Copy,
 } from 'lucide-react';
 import { BooleanOp } from '../../engine/booleanOps';
 import { ARTISTIC_BRUSH_PRESETS } from '../../engine/artisticMediaEngine';
@@ -108,6 +110,8 @@ export const DynamicPropertyBar: React.FC = () => {
     activeBrushSmoothing,
     setActiveBrushSmoothing,
     setActiveDockerTab,
+    deleteSelected,
+    duplicateSelected,
   } = useCorel();
 
   // Artistic Media Tool Ribbon
@@ -607,6 +611,26 @@ export const DynamicPropertyBar: React.FC = () => {
           Ungroup
         </button>
       )}
+
+      {/* Quick Edit Actions: Duplicate & Delete */}
+      <div className="flex items-center space-x-1 pl-1 border-l border-gray-700 ml-auto">
+        <button
+          onClick={duplicateSelected}
+          title="Duplicate Object (Ctrl+D)"
+          className="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded border border-gray-700 text-[11px] font-medium flex items-center space-x-1 transition-colors"
+        >
+          <Copy className="w-3 h-3 text-indigo-400" />
+          <span className="hidden sm:inline">Duplicate</span>
+        </button>
+        <button
+          onClick={deleteSelected}
+          title="Delete Object (Delete / Backspace)"
+          className="px-2 py-0.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 rounded text-[11px] font-medium flex items-center space-x-1 transition-colors"
+        >
+          <Trash2 className="w-3 h-3 text-rose-400" />
+          <span className="hidden sm:inline">Delete</span>
+        </button>
+      </div>
     </div>
   );
 };

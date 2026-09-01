@@ -358,12 +358,125 @@ export const Workspace: React.FC = () => {
     const canvasPt = screenToCanvas(e.clientX, e.clientY);
     setCursorPos(canvasPt);
 
+    // Pan Mode
     if (isPanning) {
       setPan({
         x: e.clientX - panStart.x,
         y: e.clientY - panStart.y,
       });
       return;
+    }
+
+    // Active Gizmo Transformation (Move, Resize, Rotate)
+    if (transformMode && dragStartScreen) {
+      const dx = (e.clientX - dragStartScreen.x) / zoom;
+      const dy = (e.clientY - dragStartScreen.y) / zoom;
+
+      if (transformMode === 'move') {
+        selectedIds.forEach(id => {
+          const init = initialTransforms[id];
+          if (init) {
+            updateObject(id, {
+              transform: {
+                ...init,
+                x: init.x + dx,
+                y: init.y + dy,
+              },
+            }, false);
+          }
+        });
+        return;
+      }
+
+      if (transformMode === 'resize') {
+        selectedIds.forEach(id => {
+          const init = initialTransforms[id];
+          const obj = activeObjects.find(o => o.id === id);
+          if (!init || !obj) return;
+
+          let newX = init.x;
+          let newY = init.y;
+          let newW = init.width;
+          let newH = init.height;
+
+          switch (transformHandle) {
+            case 'br':
+              newW = Math.max(10, init.width + dx);
+              newH = Math.max(10, init.height + dy);
+              break;
+            case 'bl':
+              newW = Math.max(10, init.width - dx);
+              newH = Math.max(10, init.height + dy);
+              newX = init.x + (init.width - newW);
+              break;
+            case 'tr':
+              newW = Math.max(10, init.width + dx);
+              newH = Math.max(10, init.height - dy);
+              newY = init.y + (init.height - newH);
+              break;
+            case 'tl':
+              newW = Math.max(10, init.width - dx);
+              newH = Math.max(10, init.height - dy);
+              newX = init.x + (init.width - newW);
+              newY = init.y + (init.height - newH);
+              break;
+            case 'mr':
+              newW = Math.max(10, init.width + dx);
+              break;
+            case 'ml':
+              newW = Math.max(10, init.width - dx);
+              newX = init.x + (init.width - newW);
+              break;
+            case 'bc':
+              newH = Math.max(10, init.height + dy);
+              break;
+            case 'tc':
+              newH = Math.max(10, init.height - dy);
+              newY = init.y + (init.height - newH);
+              break;
+          }
+
+          // If text object, dynamically scale font size proportionally with box height
+          let updatedTextProps = obj.textProps;
+          if (obj.type === 'text' && obj.textProps) {
+            const scale = newH / Math.max(1, init.height);
+            const newFontSize = Math.max(8, Math.min(250, Math.round(obj.textProps.fontSize * scale)));
+            updatedTextProps = {
+              ...obj.textProps,
+              fontSize: newFontSize,
+            };
+          }
+
+          updateObject(id, {
+            transform: {
+              ...init,
+              x: newX,
+              y: newY,
+              width: newW,
+              height: newH,
+            },
+            textProps: updatedTextProps,
+          }, false);
+        });
+        return;
+      }
+
+      if (transformMode === 'rotate' && primarySelectedObject) {
+        const init = initialTransforms[primarySelectedObject.id];
+        if (init) {
+          const centerX = init.x + init.width / 2;
+          const centerY = init.y + init.height / 2;
+          const angleRad = Math.atan2(canvasPt.y - centerY, canvasPt.x - centerX);
+          const angleDeg = Math.round((angleRad * 180) / Math.PI);
+          updateObject(primarySelectedObject.id, {
+            transform: {
+              ...init,
+              rotation: angleDeg,
+            },
+          }, false);
+        }
+        return;
+      }
     }
 
     if (isSelectingBox && selectionBox) {
@@ -387,6 +500,13 @@ export const Workspace: React.FC = () => {
   const handleMouseUp = (e: React.MouseEvent) => {
     if (isPanning) {
       setIsPanning(false);
+      return;
+    }
+
+    // Finish Transform Mode
+    if (transformMode) {
+      setTransformMode(null);
+      setTransformHandle(undefined);
       return;
     }
 

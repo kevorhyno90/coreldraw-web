@@ -24,6 +24,8 @@ import {
   Eraser,
   Wand2,
   Spline,
+  Feather,
+  Camera,
 } from 'lucide-react';
 
 interface ToolGroup {
@@ -90,10 +92,11 @@ const TOOL_GROUPS: ToolGroup[] = [
     ],
   },
   {
-    id: 'artistic_group',
-    name: 'Artistic Media',
-    defaultTool: 'artistic-media',
+    id: 'painterly_group',
+    name: 'Painterly Brushes 2025',
+    defaultTool: 'painterly-brush',
     tools: [
+      { id: 'painterly-brush', name: '2025 Painterly Brush', shortcut: 'B', icon: Feather },
       { id: 'artistic-media', name: 'Artistic Media Brush', shortcut: 'I', icon: Paintbrush },
     ],
   },
@@ -172,7 +175,7 @@ export const Toolbox: React.FC = () => {
     crop_group: 'crop',
     zoom_group: 'zoom',
     curve_group: 'freehand',
-    artistic_group: 'artistic-media',
+    painterly_group: 'painterly-brush',
     rect_group: 'rectangle',
     ellipse_group: 'ellipse',
     polygon_group: 'polygon',
@@ -204,7 +207,7 @@ export const Toolbox: React.FC = () => {
   const handleMouseDown = (groupId: string) => {
     flyoutTimerRef.current = window.setTimeout(() => {
       setOpenFlyoutId(groupId);
-    }, 250); // Hold for 250ms to open flyout menu
+    }, 250);
   };
 
   const handleMouseUp = () => {
@@ -234,22 +237,22 @@ export const Toolbox: React.FC = () => {
                 setOpenFlyoutId(group.id);
               }}
               title={`${currentTool.name} ${currentTool.shortcut ? `(${currentTool.shortcut})` : ''}`}
-              className={`w-8 h-8 rounded flex items-center justify-center relative transition ${
+              className={`w-8 h-8 rounded-xl flex items-center justify-center relative transition-all ${
                 isActive
-                  ? 'bg-[#3b82f6] text-white shadow-md'
+                  ? 'bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-500/30 scale-105'
                   : 'hover:bg-[#2d3748] text-gray-400 hover:text-gray-100'
               }`}
             >
               <IconComponent className="w-4 h-4" />
-              {/* Flyout indicator triangle (classic Corel style) */}
+              {/* Flyout indicator triangle */}
               {hasMultiple && (
-                <span className="absolute bottom-0.5 right-0.5 w-0 h-0 border-solid border-t-0 border-l-transparent border-r-[4px] border-r-transparent border-b-[4px] border-b-gray-400" />
+                <span className="absolute bottom-1 right-1 w-0 h-0 border-solid border-t-0 border-l-transparent border-r-[4px] border-r-transparent border-b-[4px] border-b-gray-400" />
               )}
             </button>
 
             {/* Flyout Popup */}
             {openFlyoutId === group.id && (
-              <div className="absolute left-full top-0 ml-1.5 bg-[#1f2430] border border-[#374151] rounded-md shadow-2xl py-1 z-50 flex flex-col min-w-[170px] text-xs">
+              <div className="absolute left-full top-0 ml-1.5 bg-[#1f2430] border border-[#374151] rounded-xl shadow-2xl py-1 z-50 flex flex-col min-w-[180px] text-xs animate-in fade-in duration-100">
                 {group.tools.map(tool => {
                   const SubIcon = tool.icon;
                   const isSubActive = activeTool === tool.id;
@@ -257,15 +260,15 @@ export const Toolbox: React.FC = () => {
                     <button
                       key={tool.id}
                       onClick={() => handleToolClick(group.id, tool.id)}
-                      className={`px-3 py-1.5 flex items-center justify-between text-left ${
-                        isSubActive ? 'bg-[#2563eb] text-white font-medium' : 'text-gray-200 hover:bg-[#2d3748]'
+                      className={`px-3 py-1.5 flex items-center justify-between text-left transition-colors ${
+                        isSubActive ? 'bg-blue-600 text-white font-medium' : 'text-gray-200 hover:bg-[#2d3748]'
                       }`}
                     >
                       <span className="flex items-center">
-                        <SubIcon className="w-3.5 h-3.5 mr-2 text-emerald-400" />
+                        <SubIcon className="w-3.5 h-3.5 mr-2 text-cyan-400" />
                         {tool.name}
                       </span>
-                      {tool.shortcut && <span className="text-gray-400 text-[10px] ml-2">{tool.shortcut}</span>}
+                      {tool.shortcut && <span className="text-gray-400 text-[10px] ml-2 font-mono">{tool.shortcut}</span>}
                     </button>
                   );
                 })}

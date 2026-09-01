@@ -1,11 +1,12 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useCorel } from '../../context/CorelContext';
-import { CorelObject, Point2D, Subpath, BezierNode } from '../../types/coreldraw';
+import { CorelObject, Point2D, Subpath, BezierNode, PainterlyStrokePoint, CorelPage } from '../../types/coreldraw';
 import { Rulers } from './Rulers';
 import { GuidelinesOverlay } from './GuidelinesOverlay';
 import { TransformGizmo } from './TransformGizmo';
 import { NodeEditGizmo } from './NodeEditGizmo';
 import { InteractiveGradientGizmo } from './InteractiveGradientGizmo';
+import { MediaTray } from './MediaTray';
 import {
   subpathsToSvgPathData,
   rectToSubpaths,
@@ -16,14 +17,30 @@ import {
 } from '../../engine/vectorMath';
 import { generate3DExtrusionFacets } from '../../engine/effectsEngine';
 import {
-  generateCalligraphicStroke,
-  generateSprayerParticles,
-  ARTISTIC_BRUSH_PRESETS,
-} from '../../engine/artisticMediaEngine';
+  generatePainterlyPath,
+  getPainterlyFilterId,
+} from '../../engine/painterlyBrushEngine';
+import { getSeparationFilteredColor } from '../../engine/prepressEngine';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  Maximize2,
+  Minimize2,
+  Hand,
+  Move,
+} from 'lucide-react';
+
+const PAGE_GAP = 120; // Horizontal gap between multi-page spreads
 
 export const Workspace: React.FC = () => {
   const {
+    pages,
+    activePageId,
+    setActivePageId,
     activePage,
+    objects,
     activeObjects,
     selectedIds,
     setSelectedIds,
@@ -36,6 +53,8 @@ export const Workspace: React.FC = () => {
     setZoom,
     pan,
     setPan,
+    resetZoom,
+    zoomToFit,
     addObject,
     updateObject,
     updateSelectedObjects,
@@ -46,14 +65,15 @@ export const Workspace: React.FC = () => {
     activeOutlineColor,
     activeOutlineWidth,
     convertToCurves,
-    activeBrushPreset,
-    activeBrushWidth,
-    activeBrushAngle,
-    activeBrushSmoothing,
+    painterlySettings,
+    prepressSettings,
   } = useCorel();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [cursorPos, setCursorPos] = useState<Point2D>({ x: 0, y: 0 });
+
+  // Spacebar tracking for hand pan
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
 
   // Dragging / Drawing state
   const [isPanning, setIsPanning] = useState(false);
@@ -63,6 +83,7 @@ export const Workspace: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState<Point2D>({ x: 0, y: 0 });
   const [freehandPoints, setFreehandPoints] = useState<Point2D[]>([]);
+  const [painterlyPoints, setPainterlyPoints] = useState<PainterlyStrokePoint[]>([]);
 
   // Selection box drag
   const [isSelectingBox, setIsSelectingBox] = useState(false);
@@ -81,11 +102,58 @@ export const Workspace: React.FC = () => {
   // Gradient tool drag state
   const [draggedGradHandle, setDraggedGradHandle] = useState<'start' | 'end' | null>(null);
 
-  // Snapping guide line indicator
-  const [activeSnapGuide, setActiveSnapGuide] = useState<{ x?: number; y?: number } | null>(null);
+  // Scrollbar drag state
+  const [isDraggingHScroll, setIsDraggingHScroll] = useState(false);
+  const [isDraggingVScroll, setIsDraggingVScroll] = useState(false);
+  const [scrollDragStart, setScrollDragStart] = useState<number>(0);
 
-  // Convert Screen (Client) coords to Page Canvas space coords
-  const screenToPage = useCallback(
+  // Multi-page layout positions
+  const pagePositions = useMemo(() => {
+    let currentX = 0;
+    return pages.map((page, idx) => {
+      const pos = {
+        ...page,
+        index: idx,
+        offsetX: currentX,
+        offsetY: 0,
+      };
+      currentX += page.width + PAGE_GAP;
+      return pos;
+    });
+  }, [pages]);
+
+  const activePagePos = useMemo(() => {
+    return pagePositions.find(p => p.id === activePageId) || pagePositions[0];
+  }, [pagePositions, activePageId]);
+
+  const totalContentWidth = useMemo(() => {
+    if (pagePositions.length === 0) return 1000;
+    const last = pagePositions[pagePositions.length - 1];
+    return last.offsetX + last.width;
+  }, [pagePositions]);
+
+  // Keyboard Spacebar listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !(e.target as HTMLElement).matches('input, textarea, select')) {
+        setIsSpacePressed(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  // Convert Screen (Client) coords to Canvas space coords
+  const screenToCanvas = useCallback(
     (clientX: number, clientY: number): Point2D => {
       if (!containerRef.current) return { x: 0, y: 0 };
       const rect = containerRef.current.getBoundingClientRect();
@@ -94,41 +162,37 @@ export const Workspace: React.FC = () => {
 
       let snX = rawX;
       let snY = rawY;
-      let guideSnap: { x?: number; y?: number } | null = null;
 
       // Snap to Grid
       if (snapSettings.snapToGrid) {
-        snX = Math.round(rawX / snapSettings.gridSize) * snapSettings.gridSize;
-        snY = Math.round(rawY / snapSettings.gridSize) * snapSettings.gridSize;
+        const gs = snapSettings.gridSize;
+        snX = Math.round(snX / gs) * gs;
+        snY = Math.round(snY / gs) * gs;
       }
 
       // Snap to Guidelines
-      if (snapSettings.snapToGuidelines) {
-        for (const g of guidelines) {
-          if (g.orientation === 'vertical' && Math.abs(rawX - g.position) < snapSettings.snapThreshold / zoom) {
-            snX = g.position;
-            guideSnap = { ...(guideSnap || {}), x: g.position };
+      if (snapSettings.snapToGuidelines && guidelines) {
+        const th = snapSettings.snapThreshold / zoom;
+        guidelines.forEach(gl => {
+          if (gl.orientation === 'vertical' && Math.abs(gl.position - rawX) < th) {
+            snX = gl.position;
+          } else if (gl.orientation === 'horizontal' && Math.abs(gl.position - rawY) < th) {
+            snY = gl.position;
           }
-          if (g.orientation === 'horizontal' && Math.abs(rawY - g.position) < snapSettings.snapThreshold / zoom) {
-            snY = g.position;
-            guideSnap = { ...(guideSnap || {}), y: g.position };
-          }
-        }
+        });
       }
 
-      setActiveSnapGuide(guideSnap);
       return { x: snX, y: snY };
     },
     [pan, zoom, snapSettings, guidelines]
   );
 
-  // Mouse Wheel (Zoom & Pan)
+  // Mouse wheel: Ctrl=Zoom, Shift=Horizontal Pan, Regular=Vertical/Horizontal Pan
   const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
-      // Zoom towards cursor
-      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
-      const newZoom = Math.min(10, Math.max(0.1, zoom * zoomFactor));
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+      const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.05), 20);
 
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
@@ -141,8 +205,14 @@ export const Workspace: React.FC = () => {
         }));
       }
       setZoom(newZoom);
+    } else if (e.shiftKey) {
+      // Horizontal sideways pan via Shift + Wheel
+      setPan(prev => ({
+        x: prev.x - (e.deltaY || e.deltaX),
+        y: prev.y,
+      }));
     } else {
-      // Pan viewport
+      // Standard 2D pan (supports touchpad sideways swipe & vertical wheel)
       setPan(prev => ({
         x: prev.x - e.deltaX,
         y: prev.y - e.deltaY,
@@ -152,91 +222,40 @@ export const Workspace: React.FC = () => {
 
   // Mouse Down
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Middle click or Pan Tool
-    if (e.button === 1 || activeTool === 'pan') {
+    // Pan mode (middle click, Space+Drag, Alt+Drag, or Pan Tool)
+    if (e.button === 1 || activeTool === 'pan' || isSpacePressed || (e.button === 0 && e.altKey)) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
       return;
     }
 
-    if (e.button !== 0) return; // Left click only
+    if (e.button !== 0) return; // Only left click for drawing/selection
 
-    const pagePt = screenToPage(e.clientX, e.clientY);
-    setDrawStart(pagePt);
+    const canvasPt = screenToCanvas(e.clientX, e.clientY);
+    setDrawStart(canvasPt);
+    setIsDrawing(true);
 
-    // Pick tool on empty canvas: Start selection marquee
-    if (activeTool === 'pick' || activeTool === 'freehand-pick') {
-      if (!e.shiftKey) {
-        clearSelection();
+    if (activeTool === 'freehand' || activeTool === 'artistic-media') {
+      setFreehandPoints([canvasPt]);
+    } else if (activeTool === 'painterly-brush') {
+      setPainterlyPoints([{ x: canvasPt.x, y: canvasPt.y, pressure: 0.7, speed: 1 }]);
+    } else if (activeTool === 'pick') {
+      // Start marquee selection box if clicked on empty canvas area
+      if ((e.target as HTMLElement).tagName === 'svg' || (e.target as HTMLElement).id === 'canvas-root-svg' || (e.target as HTMLElement).classList.contains('canvas-page-sheet')) {
+        setIsSelectingBox(true);
+        setSelectionBox({ start: canvasPt, end: canvasPt });
+        if (!e.shiftKey) {
+          clearSelection();
+        }
       }
-      setIsSelectingBox(true);
-      setSelectionBox({ start: pagePt, end: pagePt });
-      return;
-    }
-
-    // Shape & Brush Drawing tools
-    if (
-      [
-        'freehand',
-        'artistic-media',
-        'rectangle',
-        '3point-rectangle',
-        'ellipse',
-        '3point-ellipse',
-        'polygon',
-        'star',
-        'dimension',
-        'interactive-fill',
-      ].includes(activeTool)
-    ) {
-      setIsDrawing(true);
-      if (activeTool === 'freehand' || activeTool === 'artistic-media') {
-        setFreehandPoints([pagePt]);
-      }
-      return;
-    }
-
-    // Text tool: click to create text
-    if (activeTool === 'text') {
-      const newText = addObject({
-        name: 'Artistic Text',
-        type: 'text',
-        transform: {
-          x: pagePt.x,
-          y: pagePt.y,
-          width: 250,
-          height: 50,
-          rotation: 0,
-          scaleX: 1,
-          scaleY: 1,
-          skewX: 0,
-          skewY: 0,
-        },
-        textProps: {
-          text: 'CorelDRAW Vector',
-          fontFamily: 'Outfit, sans-serif',
-          fontSize: 36,
-          fontWeight: 700,
-          fontStyle: 'normal',
-          textDecoration: 'none',
-          textAlign: 'left',
-          letterSpacing: 1,
-          lineHeight: 1.1,
-        },
-        fill: { type: 'solid', color: activeFillColor },
-        outline: { color: 'none', width: 0, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
-      });
-      setActiveTool('pick');
-      setSelectedIds([newText.id]);
     }
   };
 
   // Mouse Move
   const handleMouseMove = (e: React.MouseEvent) => {
-    const pagePt = screenToPage(e.clientX, e.clientY);
-    setCursorPos(pagePt);
+    const canvasPt = screenToCanvas(e.clientX, e.clientY);
+    setCursorPos(canvasPt);
 
-    // Viewport Panning
     if (isPanning) {
       setPan({
         x: e.clientX - panStart.x,
@@ -245,104 +264,20 @@ export const Workspace: React.FC = () => {
       return;
     }
 
-    // Selection Marquee Box
     if (isSelectingBox && selectionBox) {
-      setSelectionBox(prev => (prev ? { ...prev, end: pagePt } : null));
-
-      // Calculate enclosed objects
-      const boxMinX = Math.min(selectionBox.start.x, pagePt.x);
-      const boxMaxX = Math.max(selectionBox.start.x, pagePt.x);
-      const boxMinY = Math.min(selectionBox.start.y, pagePt.y);
-      const boxMaxY = Math.max(selectionBox.start.y, pagePt.y);
-
-      const enclosed = activeObjects.filter(obj => {
-        const { x, y, width, height } = obj.transform;
-        return x >= boxMinX && x + width <= boxMaxX && y >= boxMinY && y + height <= boxMaxY;
-      });
-
-      setSelectedIds(enclosed.map(o => o.id));
+      setSelectionBox({ start: selectionBox.start, end: canvasPt });
       return;
     }
 
-    // Transform Gizmo Dragging (Move / Scale / Rotate)
-    if (transformMode && primarySelectedObject) {
-      const dx = (e.clientX - dragStartScreen.x) / zoom;
-      const dy = (e.clientY - dragStartScreen.y) / zoom;
-
-      if (transformMode === 'move') {
-        selectedIds.forEach(id => {
-          const init = initialTransforms[id];
-          if (init) {
-            updateObject(id, { transform: { ...init, x: init.x + dx, y: init.y + dy } }, false);
-          }
-        });
-      } else if (transformMode === 'resize' && transformHandle) {
-        const init = initialTransforms[primarySelectedObject.id];
-        if (init) {
-          let nw = init.width;
-          let nh = init.height;
-          let nx = init.x;
-          let ny = init.y;
-
-          if (transformHandle.includes('r')) nw = Math.max(5, init.width + dx);
-          if (transformHandle.includes('b')) nh = Math.max(5, init.height + dy);
-          if (transformHandle.includes('l')) {
-            nw = Math.max(5, init.width - dx);
-            nx = init.x + dx;
-          }
-          if (transformHandle.includes('t')) {
-            nh = Math.max(5, init.height - dy);
-            ny = init.y + dy;
-          }
-
-          updateObject(primarySelectedObject.id, { transform: { ...init, x: nx, y: ny, width: nw, height: nh } }, false);
-        }
-      } else if (transformMode === 'rotate') {
-        const init = initialTransforms[primarySelectedObject.id];
-        if (init) {
-          const center = { x: init.x + init.width / 2, y: init.y + init.height / 2 };
-          const angle = (Math.atan2(pagePt.y - center.y, pagePt.x - center.x) * 180) / Math.PI;
-          updateObject(primarySelectedObject.id, { transform: { ...init, rotation: Math.round(angle) } }, false);
-        }
+    if (isDrawing) {
+      if (activeTool === 'freehand' || activeTool === 'artistic-media') {
+        setFreehandPoints(prev => [...prev, canvasPt]);
+      } else if (activeTool === 'painterly-brush') {
+        const prev = painterlyPoints[painterlyPoints.length - 1];
+        const dist = prev ? distance(prev, canvasPt) : 1;
+        const dynamicPressure = Math.min(1.0, Math.max(0.3, 1.2 - dist / 40));
+        setPainterlyPoints(p => [...p, { x: canvasPt.x, y: canvasPt.y, pressure: dynamicPressure, speed: dist }]);
       }
-      return;
-    }
-
-    // Node Edit Dragging
-    if (draggedNodeId && primarySelectedObject && primarySelectedObject.type === 'path') {
-      const objOrigin = { x: primarySelectedObject.transform.x, y: primarySelectedObject.transform.y };
-      const localPt = { x: pagePt.x - objOrigin.x, y: pagePt.y - objOrigin.y };
-
-      const newSubpaths = primarySelectedObject.subpaths.map(sp => ({
-        ...sp,
-        nodes: sp.nodes.map(n => {
-          if (n.id !== draggedNodeId) return n;
-          if (draggedHandleType === 'node') {
-            const shiftX = localPt.x - n.x;
-            const shiftY = localPt.y - n.y;
-            return {
-              ...n,
-              x: localPt.x,
-              y: localPt.y,
-              handleIn: n.handleIn ? { x: n.handleIn.x + shiftX, y: n.handleIn.y + shiftY } : null,
-              handleOut: n.handleOut ? { x: n.handleOut.x + shiftX, y: n.handleOut.y + shiftY } : null,
-            };
-          } else if (draggedHandleType === 'handleIn') {
-            return { ...n, handleIn: localPt };
-          } else if (draggedHandleType === 'handleOut') {
-            return { ...n, handleOut: localPt };
-          }
-          return n;
-        }),
-      }));
-
-      updateObject(primarySelectedObject.id, { subpaths: newSubpaths }, false);
-      return;
-    }
-
-    // Freehand & Artistic Media Drawing stream
-    if (isDrawing && (activeTool === 'freehand' || activeTool === 'artistic-media')) {
-      setFreehandPoints(prev => [...prev, pagePt]);
     }
   };
 
@@ -353,184 +288,139 @@ export const Workspace: React.FC = () => {
       return;
     }
 
-    if (isSelectingBox) {
+    const canvasPt = screenToCanvas(e.clientX, e.clientY);
+
+    // End Marquee Selection
+    if (isSelectingBox && selectionBox) {
+      const minX = Math.min(selectionBox.start.x, selectionBox.end.x);
+      const maxX = Math.max(selectionBox.start.x, selectionBox.end.x);
+      const minY = Math.min(selectionBox.start.y, selectionBox.end.y);
+      const maxY = Math.max(selectionBox.start.y, selectionBox.end.y);
+
+      if (maxX - minX > 5 || maxY - minY > 5) {
+        const found = activeObjects.filter(obj => {
+          const t = obj.transform;
+          const absX = (activePagePos?.offsetX || 0) + t.x;
+          const absY = t.y;
+          return absX < maxX && absX + t.width > minX && absY < maxY && absY + t.height > minY;
+        });
+        setSelectedIds(found.map(o => o.id));
+      }
       setIsSelectingBox(false);
       setSelectionBox(null);
-      return;
     }
 
-    if (transformMode) {
-      setTransformMode(null);
-      setTransformHandle(undefined);
-      return;
-    }
-
-    if (draggedNodeId) {
-      setDraggedNodeId(null);
-      setDraggedHandleType(null);
-      return;
-    }
-
+    // End Object Drawing Creation
     if (isDrawing) {
       setIsDrawing(false);
-      const pagePt = screenToPage(e.clientX, e.clientY);
-      const minX = Math.min(drawStart.x, pagePt.x);
-      const minY = Math.min(drawStart.y, pagePt.y);
-      const width = Math.max(10, Math.abs(pagePt.x - drawStart.x));
-      const height = Math.max(10, Math.abs(pagePt.y - drawStart.y));
+      const currentOffsetX = activePagePos?.offsetX || 0;
+      const width = Math.abs(canvasPt.x - drawStart.x);
+      const height = Math.abs(canvasPt.y - drawStart.y);
+      const minX = Math.min(drawStart.x, canvasPt.x) - currentOffsetX;
+      const minY = Math.min(drawStart.y, canvasPt.y);
 
-      // Create Shapes based on active tool
-      if (activeTool === 'rectangle' || activeTool === '3point-rectangle') {
-        const subpaths = rectToSubpaths(width, height);
+      // Painterly Brush Stroke 2025
+      if (activeTool === 'painterly-brush' && painterlyPoints.length > 1) {
+        let pMinX = Infinity, pMaxX = -Infinity, pMinY = Infinity, pMaxY = -Infinity;
+        painterlyPoints.forEach(p => {
+          pMinX = Math.min(pMinX, p.x);
+          pMaxX = Math.max(pMaxX, p.x);
+          pMinY = Math.min(pMinY, p.y);
+          pMaxY = Math.max(pMaxY, p.y);
+        });
+        const strokeW = Math.max(20, pMaxX - pMinX);
+        const strokeH = Math.max(20, pMaxY - pMinY);
+
+        const localPoints = painterlyPoints.map(p => ({
+          ...p,
+          x: p.x - pMinX,
+          y: p.y - pMinY,
+        }));
+
+        addObject({
+          name: `2025 ${painterlySettings.mediaType.toUpperCase()} Stroke`,
+          type: 'painterly-brush',
+          transform: {
+            x: pMinX - currentOffsetX,
+            y: pMinY,
+            width: strokeW,
+            height: strokeH,
+            rotation: 0,
+            scaleX: 1,
+            scaleY: 1,
+            skewX: 0,
+            skewY: 0,
+          },
+          subpaths: [],
+          painterlyProps: {
+            mediaType: painterlySettings.mediaType,
+            points: localPoints,
+            size: painterlySettings.size,
+            opacity: painterlySettings.opacity,
+            wetness: painterlySettings.wetness,
+            bleed: painterlySettings.bleed,
+            color: activeFillColor,
+          },
+          fill: { type: 'none', color: 'none' },
+          outline: { color: activeFillColor, width: painterlySettings.size, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
+          opacity: painterlySettings.opacity,
+        });
+
+        setPainterlyPoints([]);
+      } else if (activeTool === 'rectangle' && width > 4 && height > 4) {
         addObject({
           name: `Rectangle ${activeObjects.length + 1}`,
           type: 'rect',
           transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+          subpaths: rectToSubpaths(width, height, [0, 0, 0, 0]),
           rectProps: { cornerRadii: [0, 0, 0, 0], isRoundedLinked: true },
-          subpaths,
           fill: { type: 'solid', color: activeFillColor },
-          outline: { color: activeOutlineColor, width: activeOutlineWidth, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
+          outline: { color: activeOutlineColor, width: activeOutlineWidth || 1.5, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
         });
         setActiveTool('pick');
-      } else if (activeTool === 'ellipse' || activeTool === '3point-ellipse') {
-        const subpaths = ellipseToSubpaths(width, height);
+      } else if (activeTool === 'ellipse' && width > 4 && height > 4) {
         addObject({
           name: `Ellipse ${activeObjects.length + 1}`,
           type: 'ellipse',
           transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+          subpaths: ellipseToSubpaths(width, height),
           ellipseProps: { kind: 'ellipse', startAngle: 0, endAngle: 360 },
-          subpaths,
           fill: { type: 'solid', color: activeFillColor },
-          outline: { color: activeOutlineColor, width: activeOutlineWidth, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
+          outline: { color: activeOutlineColor, width: activeOutlineWidth || 1.5, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
         });
         setActiveTool('pick');
-      } else if (activeTool === 'polygon') {
-        const subpaths = polygonToSubpaths(width, height, 5);
+      } else if (activeTool === 'polygon' && width > 4 && height > 4) {
         addObject({
           name: `Polygon ${activeObjects.length + 1}`,
           type: 'polygon',
           transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+          subpaths: polygonToSubpaths(width, height, 5),
           polygonProps: { sides: 5 },
-          subpaths,
           fill: { type: 'solid', color: activeFillColor },
-          outline: { color: activeOutlineColor, width: activeOutlineWidth, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
+          outline: { color: activeOutlineColor, width: activeOutlineWidth || 1.5, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
         });
         setActiveTool('pick');
-      } else if (activeTool === 'star') {
-        const subpaths = starToSubpaths(width, height, 5, 0.5);
+      } else if (activeTool === 'star' && width > 4 && height > 4) {
         addObject({
           name: `Star ${activeObjects.length + 1}`,
           type: 'star',
           transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+          subpaths: starToSubpaths(width, height, 5, 0.5),
           starProps: { points: 5, sharpness: 0.5 },
-          subpaths,
           fill: { type: 'solid', color: activeFillColor },
-          outline: { color: activeOutlineColor, width: activeOutlineWidth, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
+          outline: { color: activeOutlineColor, width: activeOutlineWidth || 1.5, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
         });
-        setActiveTool('pick');
-      } else if (activeTool === 'dimension') {
-        addObject({
-          name: `Dimension Line ${activeObjects.length + 1}`,
-          type: 'dimension',
-          transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
-          subpaths: [],
-          dimensionProps: {
-            start: drawStart,
-            end: pagePt,
-            offset: 25,
-            unit: 'px',
-            decimalPlaces: 1,
-            showUnits: true,
-          },
-          fill: { type: 'none', color: '#000000' },
-          outline: { color: '#38bdf8', width: 2, style: 'solid', cap: 'round', join: 'round', startArrow: 'arrow', endArrow: 'arrow' },
-        });
-        setActiveTool('pick');
-      } else if (activeTool === 'artistic-media' && freehandPoints.length > 1) {
-        const currentPreset = ARTISTIC_BRUSH_PRESETS.find(p => p.id === activeBrushPreset) || ARTISTIC_BRUSH_PRESETS[0];
-
-        if (currentPreset.category === 'sprayer') {
-          // Object Sprayer: generate scattered vector elements along path
-          const particles = generateSprayerParticles(freehandPoints, currentPreset, activeFillColor);
-          particles.forEach(p => addObject(p));
-        } else if (currentPreset.category === 'calligraphic') {
-          // Calligraphic Ribbon: generate 45-degree chisel subpaths
-          const calliSubpaths = generateCalligraphicStroke(freehandPoints, activeBrushWidth, activeBrushAngle);
-          // Shift coordinates relative to minX, minY
-          const relSubpaths = calliSubpaths.map(sp => ({
-            ...sp,
-            nodes: sp.nodes.map(n => ({ ...n, x: n.x - minX, y: n.y - minY })),
-          }));
-
-          addObject({
-            name: `Calligraphy Stroke ${activeObjects.length + 1}`,
-            type: 'path',
-            transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
-            subpaths: relSubpaths,
-            fill: { type: 'solid', color: activeFillColor },
-            outline: { color: 'none', width: 0, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
-            shadow: { enabled: false, color: '#000', blur: 0, offsetX: 0, offsetY: 0, opacity: 0 },
-          });
-        } else {
-          // Artistic & Paint Brushes (Watercolor, Neon, Charcoal, Oil)
-          const nodes: BezierNode[] = [];
-          const step = Math.max(1, Math.floor(freehandPoints.length / 20));
-
-          for (let i = 0; i < freehandPoints.length; i += step) {
-            const pt = freehandPoints[i];
-            nodes.push({
-              id: `art_node_${i}`,
-              x: pt.x - minX,
-              y: pt.y - minY,
-              type: 'smooth',
-            });
-          }
-
-          const isNeon = currentPreset.id === 'neon_glow';
-          const isWatercolor = currentPreset.id === 'watercolor_wash';
-
-          addObject({
-            name: `${currentPreset.name} ${activeObjects.length + 1}`,
-            type: 'path',
-            transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
-            subpaths: [{ isClosed: false, nodes }],
-            fill: { type: 'none', color: '#000' },
-            outline: {
-              color: isNeon ? '#38bdf8' : activeFillColor,
-              width: activeBrushWidth,
-              style: currentPreset.id === 'charcoal_rough' ? 'dashed' : 'solid',
-              cap: 'round',
-              join: 'round',
-              startArrow: 'none',
-              endArrow: 'none',
-            },
-            shadow: {
-              enabled: isNeon,
-              color: isNeon ? activeFillColor : '#000000',
-              blur: isNeon ? 12 : 0,
-              offsetX: 0,
-              offsetY: 0,
-              opacity: isNeon ? 0.9 : 0,
-            },
-            opacity: isWatercolor ? 0.65 : currentPreset.opacity,
-          });
-        }
-
-        setFreehandPoints([]);
         setActiveTool('pick');
       } else if (activeTool === 'freehand' && freehandPoints.length > 1) {
-        // Downsample and smooth freehand path to bezier
         const nodes: BezierNode[] = [];
         const step = Math.max(1, Math.floor(freehandPoints.length / 16));
 
         for (let i = 0; i < freehandPoints.length; i += step) {
           const pt = freehandPoints[i];
-          const localX = pt.x - minX;
-          const localY = pt.y - minY;
           nodes.push({
             id: `node_${i}`,
-            x: localX,
-            y: localY,
+            x: pt.x - (minX + currentOffsetX),
+            y: pt.y - minY,
             type: 'smooth',
           });
         }
@@ -538,41 +428,25 @@ export const Workspace: React.FC = () => {
         addObject({
           name: `Freehand Curve ${activeObjects.length + 1}`,
           type: 'path',
-          transform: { x: minX, y: minY, width, height, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
+          transform: { x: minX, y: minY, width: Math.max(10, width), height: Math.max(10, height), rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 },
           subpaths: [{ isClosed: false, nodes }],
-          fill: { type: 'none', color: activeFillColor },
+          fill: { type: 'none', color: 'none' },
           outline: { color: activeOutlineColor, width: activeOutlineWidth || 2, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
         });
         setFreehandPoints([]);
         setActiveTool('pick');
-      } else if (activeTool === 'interactive-fill' && primarySelectedObject) {
-        // Assign linear gradient to selected object
-        const objOrigin = { x: primarySelectedObject.transform.x, y: primarySelectedObject.transform.y };
-        updateObject(primarySelectedObject.id, {
-          fill: {
-            type: 'linear',
-            color: activeFillColor,
-            gradient: {
-              type: 'linear',
-              start: { x: drawStart.x - objOrigin.x, y: drawStart.y - objOrigin.y },
-              end: { x: pagePt.x - objOrigin.x, y: pagePt.y - objOrigin.y },
-              stops: [
-                { offset: 0, color: '#ffffff' },
-                { offset: 1, color: activeFillColor },
-              ],
-            },
-          },
-        });
       }
     }
   };
 
   // Object Click / Selection
-  const handleObjectClick = (e: React.MouseEvent, obj: CorelObject) => {
+  const handleObjectClick = (e: React.MouseEvent, obj: CorelObject, pageId: string) => {
     e.stopPropagation();
+    if (activePageId !== pageId) {
+      setActivePageId(pageId);
+    }
 
     if (activeTool === 'color-eyedropper') {
-      // Sample object color
       alert(`Sampled Color: ${obj.fill.color}`);
       return;
     }
@@ -602,15 +476,22 @@ export const Workspace: React.FC = () => {
     setDraggedHandleType(handleType);
   };
 
+  // Quick Pan Actions
+  const panLeft = () => setPan(p => ({ ...p, x: p.x + 200 }));
+  const panRight = () => setPan(p => ({ ...p, x: p.x - 200 }));
+  const panUp = () => setPan(p => ({ ...p, y: p.y + 200 }));
+  const panDown = () => setPan(p => ({ ...p, y: p.y - 200 }));
+
   return (
     <div
       ref={containerRef}
+      id="corel-viewport-container"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       className={`flex-1 relative overflow-hidden bg-[#181a20] select-none ${
-        isPanning ? 'cursor-grab active:cursor-grabbing' : ''
+        isPanning || isSpacePressed ? 'cursor-grab active:cursor-grabbing' : ''
       }`}
     >
       {/* Rulers */}
@@ -618,6 +499,7 @@ export const Workspace: React.FC = () => {
 
       {/* Main Vector SVG Canvas */}
       <svg
+        id="corel-main-canvas-svg"
         className="w-full h-full absolute top-0 left-0"
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -625,150 +507,260 @@ export const Workspace: React.FC = () => {
         }}
       >
         <defs>
-          {/* Drop shadow filter for canvas render */}
           <filter id="canvas-shadow" x="-50%" y="-50%" width="200%" height="200%">
             <feDropShadow dx="3" dy="3" stdDeviation="4" floodColor="#000000" floodOpacity="0.5" />
           </filter>
+
+          {/* 2025 Painterly Brush Filters */}
+          <filter id="filter-painterly-watercolor" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" xChannelSelector="R" yChannelSelector="G" result="displaced" />
+            <feGaussianBlur in="displaced" stdDeviation="1.2" result="blurred" />
+            <feMerge>
+              <feMergeNode in="blurred" />
+              <feMergeNode in="SourceGraphic" opacity="0.6" />
+            </feMerge>
+          </filter>
+
+          <filter id="filter-painterly-pastel" x="-10%" y="-10%" width="120%" height="120%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.18" numOctaves="2" result="grain" />
+            <feComposite operator="in" in="SourceGraphic" in2="grain" result="textured" />
+            <feMerge>
+              <feMergeNode in="SourceGraphic" opacity="0.4" />
+              <feMergeNode in="textured" />
+            </feMerge>
+          </filter>
+
+          <filter id="filter-painterly-acrylic" x="-15%" y="-15%" width="130%" height="130%">
+            <feTurbulence type="turbulence" baseFrequency="0.08" numOctaves="2" result="brushNoise" />
+            <feDisplacementMap in="SourceGraphic" in2="brushNoise" scale="3" xChannelSelector="R" yChannelSelector="B" />
+          </filter>
+
+          <filter id="filter-painterly-oil" x="-15%" y="-15%" width="130%" height="130%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="3" result="oilNoise" />
+            <feDisplacementMap in="SourceGraphic" in2="oilNoise" scale="4" xChannelSelector="G" yChannelSelector="R" />
+          </filter>
         </defs>
 
-        {/* Printable Page Sheet Background */}
-        <rect
-          x={0}
-          y={0}
-          width={activePage.width}
-          height={activePage.height}
-          fill={activePage.background || '#ffffff'}
-          stroke="#3b82f6"
-          strokeWidth="1"
-          className="shadow-2xl"
-        />
-
-        {/* Render Vector Objects */}
-        {activeObjects.map(obj => {
-          if (!obj.visible) return null;
-          const { x, y, width: w, height: h, rotation } = obj.transform;
-          const transformAttr = rotation ? `rotate(${rotation} ${w / 2} ${h / 2})` : '';
-
-          const isWireframe = viewMode === 'wireframe';
-          const isSelected = selectedIds.includes(obj.id);
-
-          // Fill calculation
-          let fillAttr = isWireframe ? 'none' : obj.fill.color;
-          if (!isWireframe && obj.fill.type === 'none') fillAttr = 'none';
-
-          // Stroke calculation
-          let strokeAttr = isWireframe ? '#00e676' : obj.outline.color;
-          let strokeWidth = isWireframe ? 1 : obj.outline.width;
-
-          // 3D Extrusion Facets behind
-          const extrudeFacets = !isWireframe && obj.extrude?.enabled ? generate3DExtrusionFacets(obj, obj.extrude) : [];
+        {/* Multi-Page Horizontal Spreads Rendering */}
+        {pagePositions.map(page => {
+          const isCurrentActive = page.id === activePageId;
+          const pageObjs = objects[page.id] || [];
 
           return (
             <g
-              key={obj.id}
-              transform={`translate(${x}, ${y})`}
-              onClick={e => handleObjectClick(e, obj)}
-              className="cursor-pointer"
+              key={page.id}
+              transform={`translate(${page.offsetX}, 0)`}
+              onClick={() => setActivePageId(page.id)}
             >
-              <g transform={transformAttr}>
-                {/* 3D Extrusion Polygons */}
-                {extrudeFacets.map((facet, fIdx) => {
-                  const ptsStr = facet.points.map(p => `${p.x},${p.y}`).join(' ');
-                  return (
-                    <polygon
-                      key={`facet_${fIdx}`}
-                      points={ptsStr}
-                      fill={facet.fill}
-                      stroke={facet.stroke || 'none'}
-                      opacity={facet.opacity}
-                    />
-                  );
-                })}
+              {/* Page Title & Dimensions Header */}
+              <text
+                x={0}
+                y={-14}
+                fill={isCurrentActive ? '#38bdf8' : '#64748b'}
+                fontSize="12"
+                fontWeight={isCurrentActive ? 'bold' : 'normal'}
+                fontFamily="Inter, sans-serif"
+                className="select-none"
+              >
+                {page.name} ({page.width} × {page.height} {page.unit})
+              </text>
 
-                {/* Text Shape */}
-                {obj.type === 'text' && obj.textProps && (
-                  <text
-                    x={0}
-                    y={obj.textProps.fontSize}
-                    fontFamily={obj.textProps.fontFamily}
-                    fontSize={obj.textProps.fontSize}
-                    fontWeight={obj.textProps.fontWeight}
-                    fontStyle={obj.textProps.fontStyle}
-                    fill={fillAttr}
-                    stroke={strokeAttr}
-                    strokeWidth={strokeWidth}
-                    textAnchor={obj.textProps.textAlign === 'center' ? 'middle' : obj.textProps.textAlign === 'right' ? 'end' : 'start'}
-                    letterSpacing={obj.textProps.letterSpacing}
+              {/* Printable Page Sheet Background */}
+              <rect
+                id={`canvas-bg-${page.id}`}
+                x={0}
+                y={0}
+                width={page.width}
+                height={page.height}
+                fill={page.background || '#ffffff'}
+                stroke={isCurrentActive ? '#3b82f6' : '#334155'}
+                strokeWidth={isCurrentActive ? 1.5 : 1}
+                className="canvas-page-sheet shadow-2xl cursor-pointer"
+              />
+
+              {/* Bleed Lines Indicator (Prepress) */}
+              {prepressSettings.bleedMm > 0 && (
+                <rect
+                  x={-prepressSettings.bleedMm * 3.78}
+                  y={-prepressSettings.bleedMm * 3.78}
+                  width={page.width + prepressSettings.bleedMm * 7.56}
+                  height={page.height + prepressSettings.bleedMm * 7.56}
+                  fill="none"
+                  stroke="#f43f5e"
+                  strokeWidth="0.8"
+                  strokeDasharray="4,4"
+                  opacity="0.7"
+                />
+              )}
+
+              {/* Prepress Crop Marks */}
+              {prepressSettings.cropMarks && (
+                <g stroke="#000000" strokeWidth="0.75" opacity="0.8">
+                  <line x1={-15} y1={0} x2={-3} y2={0} />
+                  <line x1={0} y1={-15} x2={0} y2={-3} />
+                  <line x1={page.width + 3} y1={0} x2={page.width + 15} y2={0} />
+                  <line x1={page.width} y1={-15} x2={page.width} y2={-3} />
+                  <line x1={-15} y1={page.height} x2={-3} y2={page.height} />
+                  <line x1={0} y1={page.height + 3} x2={0} y2={page.height + 15} />
+                  <line x1={page.width + 3} y1={page.height} x2={page.width + 15} y2={page.height} />
+                  <line x1={page.width} y1={page.height + 3} x2={page.width} y2={page.height + 15} />
+                </g>
+              )}
+
+              {/* Render Objects for this Page */}
+              {pageObjs.map(obj => {
+                if (!obj.visible) return null;
+                const { x, y, width: w, height: h, rotation } = obj.transform;
+                const transformAttr = rotation ? `rotate(${rotation} ${w / 2} ${h / 2})` : '';
+
+                const isWireframe = viewMode === 'wireframe';
+                const isSeparations = prepressSettings.mode === 'separations';
+                const activePlate = prepressSettings.activeSeparationView === 'all' ? 'cyan' : prepressSettings.activeSeparationView || 'cyan';
+
+                let fillAttr = isWireframe ? 'none' : obj.fill.color;
+                if (!isWireframe && obj.fill.type === 'none') fillAttr = 'none';
+                if (isSeparations && fillAttr !== 'none') {
+                  fillAttr = getSeparationFilteredColor(obj.fill.color, activePlate as any, prepressSettings.invertPlates);
+                }
+
+                let strokeAttr = isWireframe ? '#00e676' : obj.outline.color;
+                let strokeWidth = isWireframe ? 1 : obj.outline.width;
+                if (isSeparations && strokeAttr !== 'none') {
+                  strokeAttr = getSeparationFilteredColor(obj.outline.color, activePlate as any, prepressSettings.invertPlates);
+                }
+
+                const extrudeFacets = !isWireframe && obj.extrude?.enabled ? generate3DExtrusionFacets(obj, obj.extrude) : [];
+
+                return (
+                  <g
+                    key={obj.id}
+                    transform={`translate(${x}, ${y})`}
+                    onClick={e => handleObjectClick(e, obj, page.id)}
+                    className="cursor-pointer"
                   >
-                    {obj.textProps.text}
-                  </text>
-                )}
+                    <g transform={transformAttr}>
+                      {extrudeFacets.map((facet, fIdx) => (
+                        <polygon
+                          key={`facet_${fIdx}`}
+                          points={facet.points.map(p => `${p.x},${p.y}`).join(' ')}
+                          fill={facet.fill}
+                          stroke={facet.stroke || 'none'}
+                          opacity={facet.opacity}
+                        />
+                      ))}
 
-                {/* Dimension Shape */}
-                {obj.type === 'dimension' && obj.dimensionProps && (
-                  <g>
-                    <line
-                      x1={obj.dimensionProps.start.x - x}
-                      y1={obj.dimensionProps.start.y - y - obj.dimensionProps.offset}
-                      x2={obj.dimensionProps.end.x - x}
-                      y2={obj.dimensionProps.end.y - y - obj.dimensionProps.offset}
-                      stroke={obj.outline.color}
-                      strokeWidth={obj.outline.width}
-                    />
-                    <text
-                      x={(obj.dimensionProps.start.x + obj.dimensionProps.end.x) / 2 - x}
-                      y={(obj.dimensionProps.start.y + obj.dimensionProps.end.y) / 2 - y - obj.dimensionProps.offset - 4}
-                      fill={obj.outline.color}
-                      fontSize="12"
-                      fontFamily="Inter, sans-serif"
-                      textAnchor="middle"
-                    >
-                      {Math.round(distance(obj.dimensionProps.start, obj.dimensionProps.end))} {obj.dimensionProps.unit}
-                    </text>
+                      {obj.type === 'painterly-brush' && obj.painterlyProps && (
+                        <path
+                          d={generatePainterlyPath(obj.painterlyProps.points, obj.painterlyProps.size)}
+                          fill="none"
+                          stroke={fillAttr !== 'none' ? fillAttr : obj.painterlyProps.color}
+                          strokeWidth={obj.painterlyProps.size}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          filter={`url(#${getPainterlyFilterId(obj.painterlyProps.mediaType)})`}
+                          opacity={obj.painterlyProps.opacity}
+                        />
+                      )}
+
+                      {obj.type === 'text' && obj.textProps && (
+                        <text
+                          x={0}
+                          y={obj.textProps.fontSize}
+                          fontFamily={obj.textProps.fontFamily}
+                          fontSize={obj.textProps.fontSize}
+                          fontWeight={obj.textProps.fontWeight}
+                          fontStyle={obj.textProps.fontStyle}
+                          fill={fillAttr}
+                          stroke={strokeAttr}
+                          strokeWidth={strokeWidth}
+                          textAnchor={obj.textProps.textAlign === 'center' ? 'middle' : obj.textProps.textAlign === 'right' ? 'end' : 'start'}
+                          letterSpacing={obj.textProps.letterSpacing}
+                        >
+                          {obj.textProps.text}
+                        </text>
+                      )}
+
+                      {obj.type === 'dimension' && obj.dimensionProps && (
+                        <g>
+                          <line
+                            x1={obj.dimensionProps.start.x - x}
+                            y1={obj.dimensionProps.start.y - y - obj.dimensionProps.offset}
+                            x2={obj.dimensionProps.end.x - x}
+                            y2={obj.dimensionProps.end.y - y - obj.dimensionProps.offset}
+                            stroke={obj.outline.color}
+                            strokeWidth={obj.outline.width}
+                          />
+                          <text
+                            x={(obj.dimensionProps.start.x + obj.dimensionProps.end.x) / 2 - x}
+                            y={(obj.dimensionProps.start.y + obj.dimensionProps.end.y) / 2 - y - obj.dimensionProps.offset - 4}
+                            fill={obj.outline.color}
+                            fontSize="12"
+                            fontFamily="Inter, sans-serif"
+                            textAnchor="middle"
+                          >
+                            {Math.round(distance(obj.dimensionProps.start, obj.dimensionProps.end))} {obj.dimensionProps.unit}
+                          </text>
+                        </g>
+                      )}
+
+                      {obj.type === 'image' && obj.imageProps && (
+                        <image
+                          href={obj.imageProps.src}
+                          x={0}
+                          y={0}
+                          width={w}
+                          height={h}
+                          preserveAspectRatio="none"
+                          style={{
+                            filter: obj.imageProps.filter
+                              ? `brightness(${obj.imageProps.filter.brightness}%) contrast(${obj.imageProps.filter.contrast}%) saturate(${obj.imageProps.filter.saturation}%) hue-rotate(${obj.imageProps.filter.hueRotate}deg) blur(${obj.imageProps.filter.blur}px) sepia(${obj.imageProps.filter.sepia}%) grayscale(${obj.imageProps.filter.grayscale}%)`
+                              : undefined,
+                          }}
+                        />
+                      )}
+
+                      {obj.subpaths.length > 0 && (
+                        <path
+                          d={subpathsToSvgPathData(obj.subpaths)}
+                          fill={fillAttr}
+                          stroke={obj.outline.isCutContour ? '#ff007f' : strokeAttr}
+                          strokeWidth={obj.outline.isCutContour ? 0.8 : strokeWidth}
+                          strokeDasharray={obj.outline.isCutContour ? '3,2' : undefined}
+                          opacity={obj.opacity}
+                          filter={obj.shadow?.enabled && !isWireframe ? 'url(#canvas-shadow)' : undefined}
+                        />
+                      )}
+                    </g>
                   </g>
-                )}
-
-                {/* Bitmap / Photo Image Object with Filters */}
-                {obj.type === 'image' && obj.imageProps && (
-                  <image
-                    href={obj.imageProps.src}
-                    x={0}
-                    y={0}
-                    width={w}
-                    height={h}
-                    preserveAspectRatio="none"
-                    style={{
-                      filter: obj.imageProps.filter
-                        ? `brightness(${obj.imageProps.filter.brightness}%) contrast(${obj.imageProps.filter.contrast}%) saturate(${obj.imageProps.filter.saturation}%) hue-rotate(${obj.imageProps.filter.hueRotate}deg) blur(${obj.imageProps.filter.blur}px) sepia(${obj.imageProps.filter.sepia}%) grayscale(${obj.imageProps.filter.grayscale}%)`
-                        : undefined,
-                    }}
-                  />
-                )}
-
-                {/* Vector Paths & Shapes */}
-                {obj.subpaths.length > 0 && (
-                  <path
-                    d={subpathsToSvgPathData(obj.subpaths)}
-                    fill={fillAttr}
-                    stroke={strokeAttr}
-                    strokeWidth={strokeWidth}
-                    opacity={obj.opacity}
-                    filter={obj.shadow?.enabled && !isWireframe ? 'url(#canvas-shadow)' : undefined}
-                  />
-                )}
-              </g>
+                );
+              })}
             </g>
           );
         })}
 
-        {/* Freehand & Artistic Media Realtime Drawing Curve Preview */}
-        {isDrawing && (activeTool === 'freehand' || activeTool === 'artistic-media') && freehandPoints.length > 1 && (
+        {/* Realtime Painterly Brush Drawing Curve Preview */}
+        {isDrawing && activeTool === 'painterly-brush' && painterlyPoints.length > 1 && (
+          <path
+            d={generatePainterlyPath(painterlyPoints, painterlySettings.size)}
+            fill="none"
+            stroke={activeFillColor}
+            strokeWidth={painterlySettings.size}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            filter={`url(#${getPainterlyFilterId(painterlySettings.mediaType)})`}
+            opacity={painterlySettings.opacity}
+          />
+        )}
+
+        {/* Freehand Realtime Drawing Curve Preview */}
+        {isDrawing && activeTool === 'freehand' && freehandPoints.length > 1 && (
           <path
             d={freehandPoints.reduce((acc, pt, i) => (i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`), '')}
             fill="none"
-            stroke={activeTool === 'artistic-media' ? activeFillColor : '#3b82f6'}
-            strokeWidth={activeTool === 'artistic-media' ? activeBrushWidth : activeOutlineWidth || 2}
-            strokeDasharray={activeTool === 'artistic-media' ? undefined : '2,2'}
+            stroke="#3b82f6"
+            strokeWidth={activeOutlineWidth || 2}
+            strokeDasharray="2,2"
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={0.8}
@@ -778,23 +770,29 @@ export const Workspace: React.FC = () => {
         {/* Guidelines */}
         <GuidelinesOverlay />
 
-        {/* Interactive Transform Gizmo (Pick tool active) */}
+        {/* Interactive Transform Gizmo (offset by active page position) */}
         {(activeTool === 'pick' || activeTool === 'freehand-pick') && (
-          <TransformGizmo onStartTransform={handleStartTransform} />
+          <g transform={`translate(${activePagePos?.offsetX || 0}, 0)`}>
+            <TransformGizmo onStartTransform={handleStartTransform} />
+          </g>
         )}
 
-        {/* Interactive Node Editing Gizmo (Shape tool F10 active) */}
+        {/* Interactive Node Editing Gizmo */}
         {activeTool === 'shape' && (
-          <NodeEditGizmo onStartNodeDrag={handleStartNodeDrag} />
+          <g transform={`translate(${activePagePos?.offsetX || 0}, 0)`}>
+            <NodeEditGizmo onStartNodeDrag={handleStartNodeDrag} />
+          </g>
         )}
 
-        {/* Interactive Gradient Gizmo (Interactive fill G active) */}
+        {/* Interactive Gradient Gizmo */}
         {activeTool === 'interactive-fill' && (
-          <InteractiveGradientGizmo
-            onStartGradientDrag={(handle, startPt) => {
-              setDraggedGradHandle(handle);
-            }}
-          />
+          <g transform={`translate(${activePagePos?.offsetX || 0}, 0)`}>
+            <InteractiveGradientGizmo
+              onStartGradientDrag={(handle, startPt) => {
+                setDraggedGradHandle(handle);
+              }}
+            />
+          </g>
         )}
 
         {/* Selection Marquee Box */}
@@ -811,6 +809,70 @@ export const Workspace: React.FC = () => {
           />
         )}
       </svg>
+
+      {/* Floating Horizontal & Vertical Sideway Navigation Controls */}
+      <div className="absolute bottom-3 left-4 z-40 flex items-center gap-1.5 bg-[#1e222d]/90 backdrop-blur-md border border-gray-700/60 rounded-xl p-1.5 shadow-2xl text-xs text-gray-300">
+        <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider px-1">
+          Navigate:
+        </span>
+        <button
+          onClick={panLeft}
+          title="Move Sideways Left (Shift+Scroll or Space+Drag)"
+          className="p-1.5 hover:bg-gray-700/80 active:bg-blue-600 rounded-lg text-gray-200 transition-colors flex items-center gap-1"
+        >
+          <ChevronLeft size={15} />
+          <span className="text-[10px] font-medium hidden sm:inline">Left</span>
+        </button>
+
+        <button
+          onClick={panRight}
+          title="Move Sideways Right (Shift+Scroll or Space+Drag)"
+          className="p-1.5 hover:bg-gray-700/80 active:bg-blue-600 rounded-lg text-gray-200 transition-colors flex items-center gap-1"
+        >
+          <span className="text-[10px] font-medium hidden sm:inline">Right</span>
+          <ChevronRight size={15} />
+        </button>
+
+        <div className="h-4 w-[1px] bg-gray-700 mx-1" />
+
+        <button
+          onClick={panUp}
+          title="Move Up"
+          className="p-1.5 hover:bg-gray-700/80 rounded-lg text-gray-200"
+        >
+          <ChevronUp size={15} />
+        </button>
+
+        <button
+          onClick={panDown}
+          title="Move Down"
+          className="p-1.5 hover:bg-gray-700/80 rounded-lg text-gray-200"
+        >
+          <ChevronDown size={15} />
+        </button>
+
+        <div className="h-4 w-[1px] bg-gray-700 mx-1" />
+
+        <button
+          onClick={zoomToFit}
+          title="Fit All Pages (F4)"
+          className="px-2 py-1 bg-blue-600/80 hover:bg-blue-600 text-white rounded-lg text-[10px] font-medium flex items-center gap-1 shadow-sm transition-all"
+        >
+          <Maximize2 size={12} />
+          <span>Fit Pages</span>
+        </button>
+
+        <button
+          onClick={resetZoom}
+          title="Reset Zoom to 100%"
+          className="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-[10px] font-mono transition-colors"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+      </div>
+
+      {/* Floating On-Canvas Media Tray for 2025 Painterly Brushes */}
+      <MediaTray />
     </div>
   );
 };

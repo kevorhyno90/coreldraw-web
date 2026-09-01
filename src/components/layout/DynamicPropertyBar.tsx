@@ -165,6 +165,84 @@ export const DynamicPropertyBar: React.FC = () => {
     );
   }
 
+  // 2025 Painterly Brush Property Ribbon
+  if (activeTool === 'painterly-brush') {
+    const { painterlySettings, setPainterlySettings } = useCorel();
+
+    return (
+      <div className="bg-[#1b2029] border-b border-[#2d3748] px-3 py-1 flex items-center space-x-4 text-xs select-none min-h-[36px] overflow-x-auto text-gray-300">
+        <span className="font-semibold text-cyan-400 uppercase text-[10px] tracking-wider flex items-center">
+          <Sparkles className="w-3.5 h-3.5 mr-1" /> Painterly Brush 2025:
+        </span>
+
+        {/* Media Type */}
+        <div className="flex items-center space-x-1.5">
+          <span className="text-gray-400">Media:</span>
+          <select
+            value={painterlySettings.mediaType}
+            onChange={e => setPainterlySettings(p => ({ ...p, mediaType: e.target.value as any }))}
+            className="bg-[#262e3d] text-white px-2 py-0.5 rounded border border-[#374151] outline-none font-medium capitalize"
+          >
+            <option value="watercolor">🌊 Watercolor Wash</option>
+            <option value="pastel">🖍️ Dry Pastel & Chalk</option>
+            <option value="acrylic">🎨 Impasto Acrylic</option>
+            <option value="oil">🖌️ Fine Oil Paint</option>
+            <option value="wet-blend">💨 Wet Blend Smudge</option>
+            <option value="calligraphy">✒️ Calligraphic Chisel</option>
+            <option value="spray">✨ Splatter Mist</option>
+          </select>
+        </div>
+
+        {/* Brush Size */}
+        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
+          <span className="text-gray-400">Size:</span>
+          <input
+            type="range"
+            min={4}
+            max={100}
+            value={painterlySettings.size}
+            onChange={e => setPainterlySettings(p => ({ ...p, size: Number(e.target.value) }))}
+            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
+          />
+          <span className="text-white font-mono">{painterlySettings.size}px</span>
+        </div>
+
+        {/* Opacity */}
+        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
+          <span className="text-gray-400">Opacity:</span>
+          <input
+            type="range"
+            min={0.1}
+            max={1.0}
+            step={0.05}
+            value={painterlySettings.opacity}
+            onChange={e => setPainterlySettings(p => ({ ...p, opacity: Number(e.target.value) }))}
+            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
+          />
+          <span className="text-white font-mono">{Math.round(painterlySettings.opacity * 100)}%</span>
+        </div>
+
+        {/* Wetness */}
+        <div className="flex items-center space-x-1.5 bg-[#262e3d] px-2 py-0.5 rounded border border-[#374151]">
+          <span className="text-gray-400">Wetness:</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={painterlySettings.wetness}
+            onChange={e => setPainterlySettings(p => ({ ...p, wetness: Number(e.target.value) }))}
+            className="w-16 h-1 bg-gray-600 rounded-lg cursor-pointer"
+          />
+          <span className="text-white font-mono">{painterlySettings.wetness}%</span>
+        </div>
+
+        <span className="text-cyan-400/80 text-[10px] font-mono border border-cyan-800/40 px-2 py-0.5 rounded-full">
+          Stylus Tilt Active
+        </span>
+      </div>
+    );
+  }
+
   // Page Property Bar (When nothing is selected)
   if (selectedObjects.length === 0) {
     return (

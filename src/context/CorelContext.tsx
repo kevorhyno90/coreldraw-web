@@ -12,10 +12,15 @@ import {
   ViewMode,
   BezierNode,
   Subpath,
+  SuiteAppMode,
+  PrepressSettings,
+  PainterlyBrushSettings,
 } from '../types/coreldraw';
 import { PRESET_TEMPLATES } from '../engine/presetTemplates';
 import { getSelectionBounds, rectToSubpaths, ellipseToSubpaths, polygonToSubpaths, starToSubpaths } from '../engine/vectorMath';
 import { BooleanOp, performBooleanOperation } from '../engine/booleanOps';
+import { createCutContourObject } from '../engine/prepressEngine';
+import { PANTONE_DUALITIES_2025 } from '../engine/pantoneDualities';
 
 const DEFAULT_PAGE: CorelPage = {
   id: 'page_1',
@@ -26,6 +31,7 @@ const DEFAULT_PAGE: CorelPage = {
   preset: 'A4 Standard',
   orientation: 'landscape',
   background: '#ffffff',
+  isMasterPage: false,
 };
 
 const DEFAULT_SNAP: SnapSettings = {
@@ -44,15 +50,56 @@ const DEFAULT_PALETTE = [
   '#b91c1c', '#c2410c', '#b45309', '#4d7c0f', '#15803d', '#0f766e', '#0369a1', '#1d4ed8', '#4338ca', '#6d28d9', '#86198f', '#be185d'
 ];
 
+const DEFAULT_PREPRESS: PrepressSettings = {
+  mode: 'composite',
+  separations: {
+    cyan: true,
+    magenta: true,
+    yellow: true,
+    black: true,
+    spots: true,
+  },
+  invertPlates: false,
+  activeSeparationView: 'all',
+  imposition: '1-up',
+  binding: 'saddle-stitch',
+  creepMm: 0.5,
+  bleedMm: 3,
+  slugMm: 12,
+  cropMarks: true,
+  registrationMarks: true,
+  colorBars: true,
+  starTargets: true,
+  showCutContours: true,
+};
+
+const DEFAULT_PAINTERLY_BRUSH: PainterlyBrushSettings = {
+  mediaType: 'watercolor',
+  size: 32,
+  opacity: 0.75,
+  color: '#3b82f6',
+  wetness: 80,
+  bleed: 65,
+  bristleTexture: 20,
+  tiltSensitivity: true,
+  jitter: 5,
+};
+
 interface CorelContextType {
+  // Suite 2025 App Mode Switcher
+  suiteAppMode: SuiteAppMode;
+  setSuiteAppMode: (mode: SuiteAppMode) => void;
+
   // Document & Pages
   projectTitle: string;
   setProjectTitle: (t: string) => void;
   pages: CorelPage[];
   activePageId: string;
   activePage: CorelPage;
-  addPage: (preset?: string) => void;
+  addPage: (preset?: string, name?: string) => void;
   deletePage: (id: string) => void;
+  duplicatePage: (id: string) => void;
+  reorderPages: (fromIndex: number, toIndex: number) => void;
   setActivePageId: (id: string) => void;
   updateActivePage: (patch: Partial<CorelPage>) => void;
 
@@ -84,8 +131,8 @@ interface CorelContextType {
   setViewMode: (m: ViewMode) => void;
   activeDockerTab: DockerTab | null;
   setActiveDockerTab: (tab: DockerTab | null) => void;
-  openDialog: 'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | null;
-  setOpenDialog: (d: 'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | null) => void;
+  openDialog: 'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | 'cloud' | 'prepress' | 'fontmanager' | null;
+  setOpenDialog: (d: 'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | 'cloud' | 'prepress' | 'fontmanager' | null) => void;
 
   // Viewport navigation
   zoom: number;
@@ -121,6 +168,10 @@ interface CorelContextType {
   // Boolean Shaping
   applyBooleanOp: (op: BooleanOp) => void;
 
+  // 2025 Painterly Brush Engine
+  painterlySettings: PainterlyBrushSettings;
+  setPainterlySettings: React.Dispatch<React.SetStateAction<PainterlyBrushSettings>>;
+
   // Artistic Media & Brushes
   activeBrushPreset: string;
   setActiveBrushPreset: (p: string) => void;
@@ -130,6 +181,14 @@ interface CorelContextType {
   setActiveBrushAngle: (a: number) => void;
   activeBrushSmoothing: number;
   setActiveBrushSmoothing: (s: number) => void;
+
+  // 2025 Prepress & Print Controls
+  prepressSettings: PrepressSettings;
+  setPrepressSettings: React.Dispatch<React.SetStateAction<PrepressSettings>>;
+  generateCutContour: (objId?: string) => void;
+
+  // CAPTURE Utility
+  triggerScreenCapture: (mode: 'region' | 'screen' | 'canvas') => Promise<void>;
 
   // Color Palette & Active Colors
   colorPalette: string[];
@@ -164,7 +223,8 @@ interface CorelContextType {
 const CorelContext = createContext<CorelContextType | null>(null);
 
 export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projectTitle, setProjectTitle] = useState("Devin's CorelDRAW Artwork 1");
+  const [suiteAppMode, setSuiteAppMode] = useState<SuiteAppMode>('coreldraw');
+  const [projectTitle, setProjectTitle] = useState("CorelDRAW Graphics Suite 2025 Artwork");
   const [pages, setPages] = useState<CorelPage[]>([DEFAULT_PAGE]);
   const [activePageId, setActivePageId] = useState('page_1');
   
@@ -179,7 +239,11 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activeFlyout, setActiveFlyout] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('enhanced');
   const [activeDockerTab, setActiveDockerTab] = useState<DockerTab | null>('properties');
-  const [openDialog, setOpenDialog] = useState<'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | null>(null);
+  const [openDialog, setOpenDialog] = useState<'new' | 'export' | 'templates' | 'shortcuts' | 'about' | 'trace' | 'command' | 'cloud' | 'prepress' | 'fontmanager' | null>(null);
+
+  // 2025 Prepress & Painterly settings
+  const [prepressSettings, setPrepressSettings] = useState<PrepressSettings>(DEFAULT_PREPRESS);
+  const [painterlySettings, setPainterlySettings] = useState<PainterlyBrushSettings>(DEFAULT_PAINTERLY_BRUSH);
 
   // Offline and PWA Install Prompt State
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -205,7 +269,7 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (autosaveStr) {
         const saved = JSON.parse(autosaveStr);
         if (saved.pages && saved.objects) {
-          setProjectTitle(saved.name || "Devin's CorelDRAW Artwork 1");
+          setProjectTitle(saved.name || "CorelDRAW Graphics Suite 2025 Artwork");
           setPages(saved.pages);
           setActivePageId(saved.activePageId || saved.pages[0]?.id || 'page_1');
           setObjects(saved.objects);
@@ -226,7 +290,7 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const promptInstall = useCallback(async () => {
     if (!deferredPrompt) {
-      alert("Devin's CorelDRAW is already installed or your browser doesn't support install prompts. It runs 100% offline automatically!");
+      alert("CorelDRAW Graphics Suite 2025 is already running offline in your browser!");
       return;
     }
     deferredPrompt.prompt();
@@ -248,92 +312,87 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   ]);
   const [snapSettings, setSnapSettings] = useState<SnapSettings>(DEFAULT_SNAP);
 
-  // Node editing state
+  // Node Editing
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
 
-  // Colors & Palettes
+  // Brush / Artistic Media
+  const [activeBrushPreset, setActiveBrushPreset] = useState('calligraphy');
+  const [activeBrushWidth, setActiveBrushWidth] = useState(12);
+  const [activeBrushAngle, setActiveBrushAngle] = useState(45);
+  const [activeBrushSmoothing, setActiveBrushSmoothing] = useState(50);
+
+  // Color Palette
   const [colorPalette, setColorPalette] = useState<string[]>(DEFAULT_PALETTE);
-  const [activeFillColor, setActiveFillColor] = useState<string>('#3b82f6');
-  const [activeOutlineColor, setActiveOutlineColor] = useState<string>('#000000');
-  const [activeOutlineWidth, setActiveOutlineWidth] = useState<number>(2);
+  const [activeFillColor, setActiveFillColor] = useState('#3b82f6');
+  const [activeOutlineColor, setActiveOutlineColor] = useState('#1e293b');
+  const [activeOutlineWidth, setActiveOutlineWidth] = useState(1.5);
 
-  // Artistic Media Brush States
-  const [activeBrushPreset, setActiveBrushPreset] = useState<string>('calligraphy_classic');
-  const [activeBrushWidth, setActiveBrushWidth] = useState<number>(18);
-  const [activeBrushAngle, setActiveBrushAngle] = useState<number>(45);
-  const [activeBrushSmoothing, setActiveBrushSmoothing] = useState<number>(0.7);
-
-  // History Stack
+  // History system
   const [history, setHistory] = useState<HistoryStep[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isHistoryActionRef = useRef(false);
 
-  // Active page accessor
   const activePage = useMemo(() => {
     return pages.find(p => p.id === activePageId) || pages[0] || DEFAULT_PAGE;
   }, [pages, activePageId]);
 
-  // Current active page objects
   const activeObjects = useMemo(() => {
     return objects[activePageId] || [];
   }, [objects, activePageId]);
 
-  // Selected objects
   const selectedObjects = useMemo(() => {
     return activeObjects.filter(o => selectedIds.includes(o.id));
   }, [activeObjects, selectedIds]);
 
-  const primarySelectedObject = selectedObjects[0] || null;
+  const primarySelectedObject = useMemo(() => {
+    if (selectedIds.length === 0) return null;
+    return activeObjects.find(o => o.id === selectedIds[selectedIds.length - 1]) || null;
+  }, [activeObjects, selectedIds]);
 
   const selectionBounds = useMemo(() => {
     return getSelectionBounds(selectedObjects);
   }, [selectedObjects]);
 
-  // Push to history helper
+  // History helpers
   const pushHistory = useCallback((actionName: string) => {
     if (isHistoryActionRef.current) return;
+    const newStep: HistoryStep = {
+      id: `step_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      actionName,
+      timestamp: Date.now(),
+      snapshot: {
+        pages: JSON.parse(JSON.stringify(pages)),
+        activePageId,
+        objects: JSON.parse(JSON.stringify(objects)),
+        selectedIds: [...selectedIds],
+        guidelines: JSON.parse(JSON.stringify(guidelines)),
+      },
+    };
 
-    setObjects(prevObjs => {
-      setPages(prevPages => {
-        setSelectedIds(prevSelected => {
-          setGuidelines(prevGuides => {
-            const step: HistoryStep = {
-              id: `step_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              actionName,
-              timestamp: Date.now(),
-              snapshot: {
-                pages: JSON.parse(JSON.stringify(prevPages)),
-                activePageId,
-                objects: JSON.parse(JSON.stringify(prevObjs)),
-                selectedIds: [...prevSelected],
-                guidelines: JSON.parse(JSON.stringify(prevGuides)),
-              },
-            };
-
-            setHistory(prevHist => {
-              const sliced = prevHist.slice(0, historyIndex + 1);
-              return [...sliced, step].slice(-50); // Keep last 50 steps
-            });
-            setHistoryIndex(prev => Math.min(prev + 1, 49));
-
-            return prevGuides;
-          });
-          return prevSelected;
-        });
-        return prevPages;
-      });
-      return prevObjs;
+    setHistory(prev => {
+      const sliced = prev.slice(0, historyIndex + 1);
+      const updated = [...sliced, newStep];
+      if (updated.length > 50) updated.shift();
+      return updated;
     });
-  }, [activePageId, historyIndex]);
+    setHistoryIndex(prev => Math.min(prev + 1, 49));
 
-  // Initial history snapshot
-  useEffect(() => {
-    if (history.length === 0) {
-      pushHistory('Initial State');
+    // Autosave to LocalStorage
+    try {
+      localStorage.setItem('devins_coreldraw_autosave', JSON.stringify({
+        name: projectTitle,
+        pages,
+        activePageId,
+        objects,
+        guidelines,
+        colorPalette,
+        timestamp: Date.now(),
+      }));
+    } catch (e) {
+      console.warn('Autosave quota exceeded or disabled', e);
     }
-  }, [history.length, pushHistory]);
+  }, [pages, activePageId, objects, selectedIds, guidelines, colorPalette, projectTitle, historyIndex]);
 
-  // Undo / Redo
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
 
@@ -393,6 +452,7 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       textProps: objPartial.textProps,
       dimensionProps: objPartial.dimensionProps,
       brushProps: objPartial.brushProps,
+      painterlyProps: objPartial.painterlyProps,
       imageProps: objPartial.imageProps,
       groupProps: objPartial.groupProps,
       fill: objPartial.fill || { type: 'solid', color: activeFillColor },
@@ -449,67 +509,81 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return {
           ...o,
           ...patch,
+          transform: patch.transform ? { ...o.transform, ...patch.transform } : o.transform,
           fill: patch.fill ? { ...o.fill, ...patch.fill } : o.fill,
           outline: patch.outline ? { ...o.outline, ...patch.outline } : o.outline,
           shadow: patch.shadow ? { ...o.shadow, ...patch.shadow } : o.shadow,
           extrude: patch.extrude ? { ...o.extrude, ...patch.extrude } : o.extrude,
           contour: patch.contour ? { ...o.contour, ...patch.contour } : o.contour,
-          transform: patch.transform ? { ...o.transform, ...patch.transform } : o.transform,
+          transparency: patch.transparency ? { ...o.transparency, ...patch.transparency } : o.transparency,
         };
       });
       return { ...prev, [activePageId]: updated };
     });
 
     if (recordHistory) {
-      pushHistory('Update Selection Properties');
+      pushHistory('Update Selection');
     }
   }, [selectedIds, activePageId, pushHistory]);
 
   // Delete selected objects
   const deleteSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-
-    setObjects(prev => {
-      const pageObjs = prev[activePageId] || [];
-      const filtered = pageObjs.filter(o => !selectedIds.includes(o.id));
-      return { ...prev, [activePageId]: filtered };
-    });
-
+    setObjects(prev => ({
+      ...prev,
+      [activePageId]: (prev[activePageId] || []).filter(o => !selectedIds.includes(o.id)),
+    }));
     setSelectedIds([]);
     pushHistory('Delete Objects');
   }, [selectedIds, activePageId, pushHistory]);
 
   // Duplicate selected objects
   const duplicateSelected = useCallback(() => {
-    if (selectedObjects.length === 0) return;
+    if (selectedIds.length === 0) return;
+    const newObjs: CorelObject[] = [];
+    const newIds: string[] = [];
 
-    const duplicates: CorelObject[] = selectedObjects.map(obj => ({
-      ...JSON.parse(JSON.stringify(obj)),
-      id: `obj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      name: `${obj.name} Copy`,
-      transform: {
-        ...obj.transform,
-        x: obj.transform.x + 20,
-        y: obj.transform.y + 20,
-      },
-    }));
+    activeObjects.forEach(o => {
+      if (selectedIds.includes(o.id)) {
+        const cloned: CorelObject = {
+          ...JSON.parse(JSON.stringify(o)),
+          id: `obj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: `${o.name} Copy`,
+          transform: {
+            ...o.transform,
+            x: o.transform.x + 20,
+            y: o.transform.y + 20,
+          },
+          zIndex: activeObjects.length + newObjs.length,
+        };
+        newObjs.push(cloned);
+        newIds.push(cloned.id);
+      }
+    });
 
     setObjects(prev => ({
       ...prev,
-      [activePageId]: [...(prev[activePageId] || []), ...duplicates],
+      [activePageId]: [...(prev[activePageId] || []), ...newObjs],
     }));
-
-    setSelectedIds(duplicates.map(d => d.id));
+    setSelectedIds(newIds);
     pushHistory('Duplicate Objects');
-  }, [selectedObjects, activePageId, pushHistory]);
+  }, [selectedIds, activeObjects, activePageId, pushHistory]);
 
-  // Selection helpers
+  // Select all objects on active page
+  const selectAll = useCallback(() => {
+    const ids = activeObjects.filter(o => o.visible && !o.locked).map(o => o.id);
+    setSelectedIds(ids);
+  }, [activeObjects]);
+
+  // Toggle selection
   const toggleSelect = useCallback((id: string, multi: boolean = false) => {
-    if (multi) {
-      setSelectedIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
-    } else {
-      setSelectedIds([id]);
-    }
+    setSelectedIds(prev => {
+      if (!multi) return [id];
+      if (prev.includes(id)) {
+        return prev.filter(i => i !== id);
+      }
+      return [...prev, id];
+    });
   }, []);
 
   const clearSelection = useCallback(() => {
@@ -517,190 +591,219 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSelectedNodeIds([]);
   }, []);
 
-  const selectAll = useCallback(() => {
-    setSelectedIds(activeObjects.map(o => o.id));
-  }, [activeObjects]);
-
-  // Pages management
-  const addPage = useCallback((preset: string = 'A4 Standard') => {
-    const newPageId = `page_${Date.now()}`;
+  // Multi-Page Management
+  const addPage = useCallback((preset: string = 'A4 Standard', name?: string) => {
+    const newPageNum = pages.length + 1;
     const newPage: CorelPage = {
-      id: newPageId,
-      name: `Page ${pages.length + 1}`,
+      id: `page_${Date.now()}`,
+      name: name || `Page ${newPageNum}`,
       width: activePage.width,
       height: activePage.height,
       unit: activePage.unit,
-      preset,
+      preset: preset,
       orientation: activePage.orientation,
       background: '#ffffff',
+      isMasterPage: false,
     };
-
     setPages(prev => [...prev, newPage]);
-    setObjects(prev => ({ ...prev, [newPageId]: [] }));
-    setActivePageId(newPageId);
-    setSelectedIds([]);
-    pushHistory('Add New Page');
+    setObjects(prev => ({ ...prev, [newPage.id]: [] }));
+    setActivePageId(newPage.id);
+    pushHistory(`Add ${newPage.name}`);
   }, [pages.length, activePage, pushHistory]);
 
-  const deletePage = useCallback((id: string) => {
-    if (pages.length <= 1) return; // Keep at least one page
+  const duplicatePage = useCallback((id: string) => {
+    const target = pages.find(p => p.id === id);
+    if (!target) return;
+    const newPageId = `page_${Date.now()}`;
+    const newPage: CorelPage = {
+      ...JSON.parse(JSON.stringify(target)),
+      id: newPageId,
+      name: `${target.name} Copy`,
+    };
+    const clonedObjs = (objects[id] || []).map(o => ({
+      ...JSON.parse(JSON.stringify(o)),
+      id: `obj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    }));
 
-    const remainingPages = pages.filter(p => p.id !== id);
-    setPages(remainingPages);
-    if (activePageId === id) {
-      setActivePageId(remainingPages[0].id);
+    setPages(prev => [...prev, newPage]);
+    setObjects(prev => ({ ...prev, [newPageId]: clonedObjs }));
+    setActivePageId(newPageId);
+    pushHistory(`Duplicate ${target.name}`);
+  }, [pages, objects, pushHistory]);
+
+  const reorderPages = useCallback((fromIndex: number, toIndex: number) => {
+    setPages(prev => {
+      const arr = [...prev];
+      const [moved] = arr.splice(fromIndex, 1);
+      arr.splice(toIndex, 0, moved);
+      return arr;
+    });
+    pushHistory('Reorder Pages');
+  }, [pushHistory]);
+
+  const deletePage = useCallback((id: string) => {
+    if (pages.length <= 1) {
+      alert("Document must have at least one page.");
+      return;
     }
+    const idx = pages.findIndex(p => p.id === id);
+    const nextPages = pages.filter(p => p.id !== id);
+    const nextActive = nextPages[Math.max(0, idx - 1)]?.id || nextPages[0].id;
+    setPages(nextPages);
+    setActivePageId(nextActive);
+    setObjects(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
     pushHistory('Delete Page');
-  }, [pages, activePageId, pushHistory]);
+  }, [pages, pushHistory]);
 
   const updateActivePage = useCallback((patch: Partial<CorelPage>) => {
     setPages(prev => prev.map(p => (p.id === activePageId ? { ...p, ...patch } : p)));
-    pushHistory('Update Page Setup');
+    pushHistory('Update Page Settings');
   }, [activePageId, pushHistory]);
 
-  // Guidelines management
+  // Guidelines
   const addGuideline = useCallback((orientation: 'horizontal' | 'vertical', pos: number) => {
-    const newGuide: Guideline = {
+    const gl: Guideline = {
       id: `guide_${Date.now()}`,
       orientation,
       position: pos,
       color: '#06b6d4',
     };
-    setGuidelines(prev => [...prev, newGuide]);
-    pushHistory('Add Guideline');
-  }, [pushHistory]);
+    setGuidelines(prev => [...prev, gl]);
+  }, []);
 
   const removeGuideline = useCallback((id: string) => {
     setGuidelines(prev => prev.filter(g => g.id !== id));
-    pushHistory('Remove Guideline');
-  }, [pushHistory]);
+  }, []);
 
-  // Convert Parametric Shape to Curves (F10 Node Editable)
+  // Node editing (F10)
+  const updateNode = useCallback((objId: string, nodeId: string, patch: Partial<BezierNode>) => {
+    setObjects(prev => {
+      const pageObjs = prev[activePageId] || [];
+      const updated = pageObjs.map(obj => {
+        if (obj.id !== objId) return obj;
+        const newSubpaths = obj.subpaths.map(sp => ({
+          ...sp,
+          nodes: sp.nodes.map(n => (n.id === nodeId ? { ...n, ...patch } : n)),
+        }));
+        return { ...obj, subpaths: newSubpaths };
+      });
+      return { ...prev, [activePageId]: updated };
+    });
+  }, [activePageId]);
+
+  // Convert to Curves (Ctrl+Q)
   const convertToCurves = useCallback((objId: string) => {
     const obj = activeObjects.find(o => o.id === objId);
-    if (!obj) return;
+    if (!obj || obj.type === 'path') return;
 
-    let subpaths: Subpath[] = obj.subpaths;
-    const { width: w, height: h } = obj.transform;
-
-    if (subpaths.length === 0) {
-      if (obj.type === 'rect') {
-        subpaths = rectToSubpaths(w, h, obj.rectProps?.cornerRadii);
-      } else if (obj.type === 'ellipse') {
-        subpaths = ellipseToSubpaths(w, h, obj.ellipseProps?.kind, obj.ellipseProps?.startAngle, obj.ellipseProps?.endAngle);
-      } else if (obj.type === 'polygon') {
-        subpaths = polygonToSubpaths(w, h, obj.polygonProps?.sides);
-      } else if (obj.type === 'star') {
-        subpaths = starToSubpaths(w, h, obj.starProps?.points, obj.starProps?.sharpness);
-      }
+    let subpaths: Subpath[] = [];
+    if (obj.type === 'rect') {
+      subpaths = rectToSubpaths(obj.transform.width, obj.transform.height, obj.rectProps?.cornerRadii);
+    } else if (obj.type === 'ellipse') {
+      subpaths = ellipseToSubpaths(obj.transform.width, obj.transform.height);
+    } else if (obj.type === 'polygon') {
+      subpaths = polygonToSubpaths(obj.transform.width, obj.transform.height, obj.polygonProps?.sides || 5);
+    } else if (obj.type === 'star') {
+      subpaths = starToSubpaths(obj.transform.width, obj.transform.height, obj.starProps?.points || 5, obj.starProps?.sharpness || 0.5);
     }
 
-    updateObject(objId, {
-      type: 'path',
-      subpaths,
-      rectProps: undefined,
-      ellipseProps: undefined,
-      polygonProps: undefined,
-      starProps: undefined,
-    });
-    pushHistory('Convert to Curves (Ctrl+Q)');
+    if (subpaths.length > 0) {
+      updateObject(objId, {
+        type: 'path',
+        subpaths,
+      });
+      pushHistory('Convert to Curves');
+    }
   }, [activeObjects, updateObject, pushHistory]);
 
-  // Node updates
-  const updateNode = useCallback((objId: string, nodeId: string, patch: Partial<BezierNode>) => {
-    const obj = activeObjects.find(o => o.id === objId);
-    if (!obj) return;
-
-    const newSubpaths = obj.subpaths.map(sp => ({
-      ...sp,
-      nodes: sp.nodes.map(n => (n.id === nodeId ? { ...n, ...patch } : n)),
-    }));
-
-    updateObject(objId, { subpaths: newSubpaths }, false);
-  }, [activeObjects, updateObject]);
-
-  // Z-Order Operations
+  // Z-Order & Grouping
   const bringToFront = useCallback(() => {
     if (selectedIds.length === 0) return;
     setObjects(prev => {
-      const pageObjs = [...(prev[activePageId] || [])];
+      const pageObjs = prev[activePageId] || [];
+      const nonSelected = pageObjs.filter(o => !selectedIds.includes(o.id));
       const selected = pageObjs.filter(o => selectedIds.includes(o.id));
-      const unselected = pageObjs.filter(o => !selectedIds.includes(o.id));
-      return { ...prev, [activePageId]: [...unselected, ...selected] };
+      return { ...prev, [activePageId]: [...nonSelected, ...selected] };
     });
-    pushHistory('Bring to Front (Shift+PageUp)');
+    pushHistory('Bring to Front');
   }, [selectedIds, activePageId, pushHistory]);
 
   const sendToBack = useCallback(() => {
     if (selectedIds.length === 0) return;
     setObjects(prev => {
-      const pageObjs = [...(prev[activePageId] || [])];
+      const pageObjs = prev[activePageId] || [];
+      const nonSelected = pageObjs.filter(o => !selectedIds.includes(o.id));
       const selected = pageObjs.filter(o => selectedIds.includes(o.id));
-      const unselected = pageObjs.filter(o => !selectedIds.includes(o.id));
-      return { ...prev, [activePageId]: [...selected, ...unselected] };
+      return { ...prev, [activePageId]: [...selected, ...nonSelected] };
     });
-    pushHistory('Send to Back (Shift+PageDown)');
+    pushHistory('Send to Back');
   }, [selectedIds, activePageId, pushHistory]);
 
   const bringForward = useCallback(() => {
     if (selectedIds.length === 0) return;
     setObjects(prev => {
-      const list = [...(prev[activePageId] || [])];
-      for (let i = list.length - 2; i >= 0; i--) {
-        if (selectedIds.includes(list[i].id) && !selectedIds.includes(list[i + 1].id)) {
-          const temp = list[i];
-          list[i] = list[i + 1];
-          list[i + 1] = temp;
+      const pageObjs = [...(prev[activePageId] || [])];
+      for (let i = pageObjs.length - 2; i >= 0; i--) {
+        if (selectedIds.includes(pageObjs[i].id) && !selectedIds.includes(pageObjs[i + 1].id)) {
+          const temp = pageObjs[i];
+          pageObjs[i] = pageObjs[i + 1];
+          pageObjs[i + 1] = temp;
         }
       }
-      return { ...prev, [activePageId]: list };
+      return { ...prev, [activePageId]: pageObjs };
     });
-    pushHistory('Bring Forward (Ctrl+PageUp)');
+    pushHistory('Bring Forward');
   }, [selectedIds, activePageId, pushHistory]);
 
   const sendBackward = useCallback(() => {
     if (selectedIds.length === 0) return;
     setObjects(prev => {
-      const list = [...(prev[activePageId] || [])];
-      for (let i = 1; i < list.length; i++) {
-        if (selectedIds.includes(list[i].id) && !selectedIds.includes(list[i - 1].id)) {
-          const temp = list[i];
-          list[i] = list[i - 1];
-          list[i - 1] = temp;
+      const pageObjs = [...(prev[activePageId] || [])];
+      for (let i = 1; i < pageObjs.length; i++) {
+        if (selectedIds.includes(pageObjs[i].id) && !selectedIds.includes(pageObjs[i - 1].id)) {
+          const temp = pageObjs[i];
+          pageObjs[i] = pageObjs[i - 1];
+          pageObjs[i - 1] = temp;
         }
       }
-      return { ...prev, [activePageId]: list };
+      return { ...prev, [activePageId]: pageObjs };
     });
-    pushHistory('Send Backward (Ctrl+PageDown)');
+    pushHistory('Send Backward');
   }, [selectedIds, activePageId, pushHistory]);
 
-  // Grouping
   const groupSelected = useCallback(() => {
     if (selectedObjects.length < 2) return;
+    const b = selectionBounds;
+    if (!b) return;
+
     const groupObj: CorelObject = {
       id: `group_${Date.now()}`,
       name: `Group (${selectedObjects.length} objects)`,
       type: 'group',
       transform: {
-        x: selectionBounds?.minX || 0,
-        y: selectionBounds?.minY || 0,
-        width: selectionBounds?.width || 100,
-        height: selectionBounds?.height || 100,
+        x: b.minX,
+        y: b.minY,
+        width: b.width,
+        height: b.height,
         rotation: 0,
         scaleX: 1,
         scaleY: 1,
         skewX: 0,
         skewY: 0,
       },
+      subpaths: [],
       groupProps: {
         childrenIds: selectedObjects.map(o => o.id),
       },
-      subpaths: [],
-      fill: { type: 'none', color: '#000' },
-      outline: { color: 'none', width: 0, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
-      shadow: { enabled: false, color: '#000', blur: 0, offsetX: 0, offsetY: 0, opacity: 0 },
-      extrude: { enabled: false, depth: 0, angle: 0, vanishingPoint: { x: 0, y: 0 }, bevel: 0, lightIntensity: 0.8 },
-      contour: { enabled: false, type: 'outside', steps: 1, offset: 5, endColor: '#fff' },
+      fill: { type: 'none', color: 'none' },
+      outline: { color: 'none', width: 0, style: 'solid', cap: 'butt', join: 'miter', startArrow: 'none', endArrow: 'none' },
+      shadow: { enabled: false, color: '', blur: 0, offsetX: 0, offsetY: 0, opacity: 0 },
+      extrude: { enabled: false, depth: 0, angle: 0, vanishingPoint: { x: 0, y: 0 }, bevel: 0, lightIntensity: 1 },
+      contour: { enabled: false, type: 'outside', steps: 1, offset: 0, endColor: '' },
       transparency: { enabled: false, type: 'uniform', opacity: 1 },
       opacity: 1,
       locked: false,
@@ -712,174 +815,267 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ...prev,
       [activePageId]: [...(prev[activePageId] || []), groupObj],
     }));
-
     setSelectedIds([groupObj.id]);
-    pushHistory('Group Objects (Ctrl+G)');
+    pushHistory('Group Objects');
   }, [selectedObjects, selectionBounds, activeObjects.length, activePageId, pushHistory]);
 
   const ungroupSelected = useCallback(() => {
-    const groups = selectedObjects.filter(o => o.type === 'group' && o.groupProps?.childrenIds);
+    const groups = selectedObjects.filter(o => o.type === 'group');
     if (groups.length === 0) return;
 
-    const groupIds = groups.map(g => g.id);
-    const childIds = groups.flatMap(g => g.groupProps!.childrenIds);
-
-    setObjects(prev => {
-      const pageObjs = (prev[activePageId] || []).filter(o => !groupIds.includes(o.id));
-      return { ...prev, [activePageId]: pageObjs };
-    });
-
-    setSelectedIds(childIds);
-    pushHistory('Ungroup Objects (Ctrl+U)');
+    setObjects(prev => ({
+      ...prev,
+      [activePageId]: (prev[activePageId] || []).filter(o => !groups.some(g => g.id === o.id)),
+    }));
+    setSelectedIds([]);
+    pushHistory('Ungroup Objects');
   }, [selectedObjects, activePageId, pushHistory]);
 
-  // Alignment
+  // Align Objects
   const alignSelected = useCallback((type: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'page-center') => {
     if (selectedObjects.length === 0) return;
-    const bounds = selectionBounds;
-    if (!bounds && type !== 'page-center') return;
 
-    setObjects(prev => {
-      const pageObjs = prev[activePageId] || [];
-      const updated = pageObjs.map(obj => {
-        if (!selectedIds.includes(obj.id)) return obj;
-
-        let nx = obj.transform.x;
-        let ny = obj.transform.y;
-
-        switch (type) {
-          case 'left':
-            nx = bounds!.minX;
-            break;
-          case 'center':
-            nx = bounds!.centerX - obj.transform.width / 2;
-            break;
-          case 'right':
-            nx = bounds!.maxX - obj.transform.width;
-            break;
-          case 'top':
-            ny = bounds!.minY;
-            break;
-          case 'middle':
-            ny = bounds!.centerY - obj.transform.height / 2;
-            break;
-          case 'bottom':
-            ny = bounds!.maxY - obj.transform.height;
-            break;
-          case 'page-center':
-            nx = activePage.width / 2 - obj.transform.width / 2;
-            ny = activePage.height / 2 - obj.transform.height / 2;
-            break;
-        }
-
-        return {
-          ...obj,
-          transform: {
-            ...obj.transform,
-            x: nx,
-            y: ny,
-          },
-        };
-      });
-
-      return { ...prev, [activePageId]: updated };
-    });
-
-    pushHistory(`Align ${type}`);
-  }, [selectedObjects.length, selectionBounds, selectedIds, activePageId, activePage.width, activePage.height, pushHistory]);
-
-  // Boolean Shaping Operations
-  const applyBooleanOp = useCallback((op: BooleanOp) => {
-    if (selectedObjects.length < 2) return;
-
-    // Convert parametric objects to curves first if needed
-    const preparedObjects = selectedObjects.map(obj => {
-      if (obj.subpaths.length > 0) return obj;
-      let sp: Subpath[] = [];
-      const { width: w, height: h } = obj.transform;
-      if (obj.type === 'rect') sp = rectToSubpaths(w, h, obj.rectProps?.cornerRadii);
-      else if (obj.type === 'ellipse') sp = ellipseToSubpaths(w, h, obj.ellipseProps?.kind, obj.ellipseProps?.startAngle, obj.ellipseProps?.endAngle);
-      else if (obj.type === 'polygon') sp = polygonToSubpaths(w, h, obj.polygonProps?.sides);
-      else if (obj.type === 'star') sp = starToSubpaths(w, h, obj.starProps?.points, obj.starProps?.sharpness);
-      return { ...obj, subpaths: sp };
-    });
-
-    const res = performBooleanOperation(preparedObjects, op);
-    if (!res) {
-      alert('Boolean operation could not be completed on the selected paths.');
+    if (type === 'page-center') {
+      const cx = activePage.width / 2;
+      const cy = activePage.height / 2;
+      if (selectionBounds) {
+        const dx = cx - (selectionBounds.minX + selectionBounds.width / 2);
+        const dy = cy - (selectionBounds.minY + selectionBounds.height / 2);
+        selectedObjects.forEach(o => {
+          updateObject(o.id, {
+            transform: {
+              ...o.transform,
+              x: o.transform.x + dx,
+              y: o.transform.y + dy,
+            },
+          }, false);
+        });
+      }
+      pushHistory('Align Center to Page');
       return;
     }
 
-    setObjects(prev => {
-      const pageObjs = (prev[activePageId] || []).filter(o => !res.removedIds.includes(o.id));
-      return { ...prev, [activePageId]: [...pageObjs, res.newObject] };
-    });
+    if (selectedObjects.length < 2 || !selectionBounds) return;
+    const b = selectionBounds;
 
-    setSelectedIds([res.newObject.id]);
-    pushHistory(`Shaping: ${op.toUpperCase()}`);
+    selectedObjects.forEach(o => {
+      let newX = o.transform.x;
+      let newY = o.transform.y;
+
+      if (type === 'left') newX = b.minX;
+      else if (type === 'right') newX = b.maxX - o.transform.width;
+      else if (type === 'center') newX = b.minX + (b.width - o.transform.width) / 2;
+      else if (type === 'top') newY = b.minY;
+      else if (type === 'bottom') newY = b.maxY - o.transform.height;
+      else if (type === 'middle') newY = b.minY + (b.height - o.transform.height) / 2;
+
+      updateObject(o.id, {
+        transform: {
+          ...o.transform,
+          x: newX,
+          y: newY,
+        },
+      }, false);
+    });
+    pushHistory(`Align ${type}`);
+  }, [selectedObjects, activePage, selectionBounds, updateObject, pushHistory]);
+
+  // Boolean Operations
+  const applyBooleanOp = useCallback((op: BooleanOp) => {
+    if (selectedObjects.length < 2) {
+      alert("Please select at least 2 overlapping vector objects for Boolean operations.");
+      return;
+    }
+    const result = performBooleanOperation(selectedObjects, op);
+    if (!result) return;
+
+    const { newObject, removedIds } = result;
+    setObjects(prev => ({
+      ...prev,
+      [activePageId]: [...(prev[activePageId] || []).filter(o => !removedIds.includes(o.id)), newObject],
+    }));
+    setSelectedIds([newObject.id]);
+    pushHistory(`Boolean ${op.toUpperCase()}`);
   }, [selectedObjects, activePageId, pushHistory]);
 
-  // Zoom controls
+  // Prepress CutContour Generation
+  const generateCutContour = useCallback((objId?: string) => {
+    const target = objId ? activeObjects.find(o => o.id === objId) : primarySelectedObject;
+    if (!target) {
+      alert("Select an object to generate a Prepress CutContour hairline.");
+      return;
+    }
+    const cutObj = createCutContourObject(target);
+    setObjects(prev => ({
+      ...prev,
+      [activePageId]: [...(prev[activePageId] || []), cutObj],
+    }));
+    setSelectedIds([cutObj.id]);
+    pushHistory('Generate CutContour Hairline');
+  }, [activeObjects, primarySelectedObject, activePageId, pushHistory]);
+
+  // Screen & Canvas CAPTURE Utility
+  const triggerScreenCapture = useCallback(async (mode: 'region' | 'screen' | 'canvas') => {
+    try {
+      if (mode === 'canvas') {
+        const svgEl = document.getElementById('corel-main-canvas-svg');
+        if (!svgEl) return;
+        const xml = new XMLSerializer().serializeToString(svgEl);
+        const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = activePage.width;
+          canvas.height = activePage.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = activePage.background;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            const pngData = canvas.toDataURL('image/png');
+            addObject({
+              name: `Capture Canvas Snip`,
+              type: 'image',
+              transform: {
+                x: 40,
+                y: 40,
+                width: Math.min(activePage.width * 0.8, 400),
+                height: Math.min(activePage.height * 0.8, 300),
+                rotation: 0,
+                scaleX: 1,
+                scaleY: 1,
+                skewX: 0,
+                skewY: 0,
+              },
+              imageProps: {
+                src: pngData,
+                naturalWidth: canvas.width,
+                naturalHeight: canvas.height,
+              },
+            });
+          }
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+      } else if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        await video.play();
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/png');
+          addObject({
+            name: `Screen Snip (${new Date().toLocaleTimeString()})`,
+            type: 'image',
+            transform: {
+              x: 50,
+              y: 50,
+              width: 500,
+              height: (500 * canvas.height) / canvas.width,
+              rotation: 0,
+              scaleX: 1,
+              scaleY: 1,
+              skewX: 0,
+              skewY: 0,
+            },
+            imageProps: {
+              src: dataUrl,
+              naturalWidth: canvas.width,
+              naturalHeight: canvas.height,
+            },
+          });
+        }
+        stream.getTracks().forEach(t => t.stop());
+      } else {
+        alert("Screen capture is supported in standard desktop browser sessions.");
+      }
+    } catch (err) {
+      console.warn("Capture aborted or unavailable:", err);
+    }
+  }, [activePage, addObject]);
+
+  // Viewport Navigation
   const resetZoom = useCallback(() => {
     setZoom(1);
     setPan({ x: 80, y: 40 });
   }, []);
 
   const zoomToFit = useCallback(() => {
-    const containerW = window.innerWidth - 380;
-    const containerH = window.innerHeight - 140;
-    const scale = Math.min(containerW / activePage.width, containerH / activePage.height) * 0.85;
-    const clampedScale = Math.min(4, Math.max(0.2, scale));
-    setZoom(clampedScale);
+    const container = document.getElementById('corel-viewport-container');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const margin = 80;
+    const scaleX = (rect.width - margin) / activePage.width;
+    const scaleY = (rect.height - margin) / activePage.height;
+    const newZoom = Math.max(0.1, Math.min(2.5, Math.min(scaleX, scaleY)));
+    setZoom(newZoom);
     setPan({
-      x: (containerW - activePage.width * clampedScale) / 2 + 50,
-      y: (containerH - activePage.height * clampedScale) / 2 + 20,
+      x: (rect.width - activePage.width * newZoom) / 2,
+      y: (rect.height - activePage.height * newZoom) / 2,
     });
-  }, [activePage.width, activePage.height]);
+  }, [activePage]);
 
   const zoomToSelection = useCallback(() => {
-    if (!selectionBounds) return;
-    const containerW = window.innerWidth - 380;
-    const containerH = window.innerHeight - 140;
-    const scale = Math.min(containerW / selectionBounds.width, containerH / selectionBounds.height) * 0.7;
-    const clampedScale = Math.min(6, Math.max(0.3, scale));
-    setZoom(clampedScale);
+    if (!selectionBounds) {
+      zoomToFit();
+      return;
+    }
+    const container = document.getElementById('corel-viewport-container');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const margin = 100;
+    const scaleX = (rect.width - margin) / selectionBounds.width;
+    const scaleY = (rect.height - margin) / selectionBounds.height;
+    const newZoom = Math.max(0.2, Math.min(4, Math.min(scaleX, scaleY)));
+    setZoom(newZoom);
     setPan({
-      x: containerW / 2 - selectionBounds.centerX * clampedScale,
-      y: containerH / 2 - selectionBounds.centerY * clampedScale,
+      x: (rect.width - selectionBounds.width * newZoom) / 2 - selectionBounds.minX * newZoom,
+      y: (rect.height - selectionBounds.height * newZoom) / 2 - selectionBounds.minY * newZoom,
     });
-  }, [selectionBounds]);
+  }, [selectionBounds, zoomToFit]);
 
-  // Template & Project Loaders
+  // Load Template
   const loadTemplate = useCallback((templateId: string) => {
-    const tpl = PRESET_TEMPLATES.find(t => t.id === templateId);
-    if (!tpl) return;
-
-    setProjectTitle(tpl.title);
-    setPages([tpl.page]);
-    setActivePageId(tpl.page.id);
-    setObjects({ [tpl.page.id]: JSON.parse(JSON.stringify(tpl.objects)) });
+    const t = PRESET_TEMPLATES.find(tpl => tpl.id === templateId);
+    if (!t) return;
+    setProjectTitle(t.title);
+    setPages([t.page]);
+    setActivePageId(t.page.id);
+    setObjects({
+      [t.page.id]: JSON.parse(JSON.stringify(t.objects)),
+    });
     setSelectedIds([]);
-    pushHistory(`Load Template: ${tpl.title}`);
-  }, [pushHistory]);
+    setHistory([]);
+    setHistoryIndex(-1);
+  }, []);
 
+  // Load Document
   const loadProjectDocument = useCallback((doc: ProjectDocument) => {
-    setProjectTitle(doc.name || 'Imported CorelDRAW Project');
-    setPages(doc.pages || [DEFAULT_PAGE]);
-    setActivePageId(doc.activePageId || doc.pages[0]?.id || 'page_1');
+    if (!doc.pages || doc.pages.length === 0) return;
+    setProjectTitle(doc.name || 'Imported Artwork');
+    setPages(doc.pages);
+    setActivePageId(doc.activePageId || doc.pages[0].id);
     setObjects(doc.objects || {});
-    setGuidelines(doc.guidelines || []);
+    if (doc.guidelines) setGuidelines(doc.guidelines);
     if (doc.snapSettings) setSnapSettings(doc.snapSettings);
     if (doc.colorPalette) setColorPalette(doc.colorPalette);
     setSelectedIds([]);
-    pushHistory('Load Project Document');
-  }, [pushHistory]);
+    setHistory([]);
+    setHistoryIndex(-1);
+  }, []);
 
   const getProjectDocument = useCallback((): ProjectDocument => {
     return {
       id: `cdrw_${Date.now()}`,
       name: projectTitle,
-      version: '2026.1',
+      version: '2025.1.0',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       pages,
@@ -891,96 +1087,11 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [projectTitle, pages, activePageId, objects, guidelines, snapSettings, colorPalette]);
 
-  // Global Keyboard Shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in an input or textarea
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
-        return;
-      }
-
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-        e.preventDefault();
-        redo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        duplicateSelected();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        selectAll();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
-        e.preventDefault();
-        if (e.shiftKey) ungroupSelected();
-        else groupSelected();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
-        e.preventDefault();
-        ungroupSelected();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'q') {
-        e.preventDefault();
-        if (primarySelectedObject) convertToCurves(primarySelectedObject.id);
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        deleteSelected();
-      } else if (e.key === 'F10') {
-        e.preventDefault();
-        setActiveTool('shape');
-      } else if (e.key === 'F5') {
-        e.preventDefault();
-        setActiveTool('freehand');
-      } else if (e.key === 'F6') {
-        e.preventDefault();
-        setActiveTool('rectangle');
-      } else if (e.key === 'F7') {
-        e.preventDefault();
-        setActiveTool('ellipse');
-      } else if (e.key === 'F8') {
-        e.preventDefault();
-        setActiveTool('text');
-      } else if (e.key.toLowerCase() === 'y' && !e.ctrlKey) {
-        setActiveTool('polygon');
-      } else if (e.key.toLowerCase() === 'i' && !e.ctrlKey) {
-        setActiveTool('artistic-media');
-      } else if (e.key.toLowerCase() === 'g' && !e.ctrlKey) {
-        setActiveTool('interactive-fill');
-      } else if (e.key.toLowerCase() === 'p' && !e.ctrlKey) {
-        alignSelected('page-center');
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    undo,
-    redo,
-    duplicateSelected,
-    selectAll,
-    groupSelected,
-    ungroupSelected,
-    deleteSelected,
-    primarySelectedObject,
-    convertToCurves,
-    alignSelected,
-  ]);
-
-  // Debounced Autosave to localStorage for 100% offline resilience
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const doc = getProjectDocument();
-        localStorage.setItem('devins_coreldraw_autosave', JSON.stringify(doc));
-      } catch (e) {
-        // Storage quota full or disabled
-      }
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [getProjectDocument]);
-
   return (
     <CorelContext.Provider
       value={{
+        suiteAppMode,
+        setSuiteAppMode,
         projectTitle,
         setProjectTitle,
         pages,
@@ -988,6 +1099,8 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         activePage,
         addPage,
         deletePage,
+        duplicatePage,
+        reorderPages,
         setActivePageId,
         updateActivePage,
         objects,
@@ -1039,6 +1152,8 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ungroupSelected,
         alignSelected,
         applyBooleanOp,
+        painterlySettings,
+        setPainterlySettings,
         activeBrushPreset,
         setActiveBrushPreset,
         activeBrushWidth,
@@ -1047,6 +1162,10 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setActiveBrushAngle,
         activeBrushSmoothing,
         setActiveBrushSmoothing,
+        prepressSettings,
+        setPrepressSettings,
+        generateCutContour,
+        triggerScreenCapture,
         colorPalette,
         setColorPalette,
         activeFillColor,

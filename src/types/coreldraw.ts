@@ -20,7 +20,7 @@ export interface Subpath {
   isClosed: boolean;
 }
 
-export type FillType = 'none' | 'solid' | 'linear' | 'radial' | 'pattern';
+export type FillType = 'none' | 'solid' | 'linear' | 'radial' | 'pattern' | 'mesh';
 
 export interface GradientStop {
   offset: number; // 0 to 1
@@ -38,9 +38,14 @@ export interface ObjectFill {
   type: FillType;
   color: string;
   gradient?: GradientFill;
+  pantoneSpot?: {
+    code: string;
+    name: string;
+    cmyk: [number, number, number, number];
+  };
 }
 
-export type StrokeStyle = 'solid' | 'dashed' | 'dotted' | 'dash-dot';
+export type StrokeStyle = 'solid' | 'dashed' | 'dotted' | 'dash-dot' | 'cut-contour';
 export type StrokeCap = 'butt' | 'round' | 'square';
 export type StrokeJoin = 'miter' | 'round' | 'bevel';
 export type ArrowheadType = 'none' | 'arrow' | 'stealth' | 'circle' | 'diamond' | 'bar';
@@ -55,6 +60,7 @@ export interface ObjectOutline {
   endArrow: ArrowheadType;
   behindFill?: boolean;
   scaleWithObject?: boolean;
+  isCutContour?: boolean; // Prepress / Vinyl Cutter Hairline
 }
 
 export interface DropShadowEffect {
@@ -93,6 +99,39 @@ export interface TransparencyEffect {
   end?: Point2D;
 }
 
+export type PainterlyMediaType =
+  | 'watercolor'
+  | 'pastel'
+  | 'chalk'
+  | 'acrylic'
+  | 'oil'
+  | 'wet-blend'
+  | 'calligraphy'
+  | 'marker'
+  | 'charcoal'
+  | 'spray';
+
+export interface PainterlyStrokePoint {
+  x: number;
+  y: number;
+  pressure: number; // 0 to 1
+  tiltX?: number;
+  tiltY?: number;
+  speed?: number;
+}
+
+export interface PainterlyBrushSettings {
+  mediaType: PainterlyMediaType;
+  size: number;
+  opacity: number;
+  color: string;
+  wetness: number; // 0 to 100
+  bleed: number; // 0 to 100
+  bristleTexture: number; // 0 to 100
+  tiltSensitivity: boolean;
+  jitter: number;
+}
+
 export type ObjectType =
   | 'path'
   | 'rect'
@@ -105,6 +144,7 @@ export type ObjectType =
   | 'text'
   | 'dimension'
   | 'artistic-brush'
+  | 'painterly-brush'
   | 'image'
   | 'group';
 
@@ -165,6 +205,9 @@ export interface CorelObject {
     letterSpacing: number;
     lineHeight: number;
     fitToPathId?: string;
+    variableWeight?: number;
+    variableWidth?: number;
+    variableSlant?: number;
   };
   dimensionProps?: {
     start: Point2D;
@@ -179,6 +222,15 @@ export interface CorelObject {
     smoothing: number;
     pressurePoints?: number[];
   };
+  painterlyProps?: {
+    mediaType: PainterlyMediaType;
+    points: PainterlyStrokePoint[];
+    size: number;
+    opacity: number;
+    wetness: number;
+    bleed: number;
+    color: string;
+  };
   imageProps?: {
     src: string;
     naturalWidth: number;
@@ -192,7 +244,14 @@ export interface CorelObject {
       sepia: number; // 0 to 100
       grayscale: number; // 0 to 100
       invert: boolean;
+      levelsMin?: number;
+      levelsMax?: number;
+      levelsGamma?: number;
+      curvesHighlight?: number;
+      curvesShadow?: number;
+      vibrance?: number;
     };
+    maskDataUrl?: string;
   };
   groupProps?: {
     childrenIds: string[];
@@ -221,6 +280,7 @@ export interface CorelPage {
   preset: string; // e.g. 'A4', 'Letter', '1080p', 'Custom'
   orientation: 'portrait' | 'landscape';
   background: string;
+  isMasterPage?: boolean;
 }
 
 export interface Guideline {
@@ -261,6 +321,7 @@ export type ActiveTool =
   | 'polyline'
   | '3point-curve'
   | 'artistic-media'
+  | 'painterly-brush' // 2025 Painterly Brush
   | 'rectangle' // F6
   | '3point-rectangle'
   | 'ellipse' // F7
@@ -283,7 +344,10 @@ export type ActiveTool =
   | 'color-eyedropper'
   | 'attributes-eyedropper'
   | 'interactive-fill' // G
-  | 'smart-fill';
+  | 'smart-fill'
+  | 'photo-retouch'
+  | 'photo-mask'
+  | 'capture-region';
 
 export type DockerTab =
   | 'objects'
@@ -294,12 +358,67 @@ export type DockerTab =
   | 'effects'
   | 'photo'
   | 'typography'
+  | 'fontmanager'
+  | 'prepress'
   | 'ai'
   | 'trace'
   | 'align'
-  | 'history';
+  | 'history'
+  | 'cloud';
 
 export type ViewMode = 'wireframe' | 'draft' | 'normal' | 'enhanced';
+
+export type SuiteAppMode =
+  | 'coreldraw'
+  | 'photopaint'
+  | 'fontmanager'
+  | 'powertrace'
+  | 'capture'
+  | 'cloud';
+
+export interface PrepressSettings {
+  mode: 'composite' | 'separations' | 'imposition' | 'cutpath';
+  separations: {
+    cyan: boolean;
+    magenta: boolean;
+    yellow: boolean;
+    black: boolean;
+    spots: boolean;
+  };
+  invertPlates: boolean;
+  activeSeparationView?: 'all' | 'cyan' | 'magenta' | 'yellow' | 'black' | 'spot';
+  imposition: '1-up' | '2-up-spread' | '2-up-booklet' | '4-up-step' | '8-up-signature';
+  binding: 'saddle-stitch' | 'perfect-bound' | 'side-stitch';
+  creepMm: number;
+  bleedMm: number;
+  slugMm: number;
+  cropMarks: boolean;
+  registrationMarks: boolean;
+  colorBars: boolean;
+  starTargets: boolean;
+  showCutContours: boolean;
+}
+
+export interface PantoneColor {
+  code: string;
+  name: string;
+  hex: string;
+  cmyk: [number, number, number, number];
+  category: 'Dualities 2025' | 'PMS Solid' | 'Pastels' | 'Neon' | 'Metallics' | 'Earth & Luxe';
+}
+
+export interface GoogleFontMeta {
+  family: string;
+  category: 'sans-serif' | 'serif' | 'display' | 'handwriting' | 'monospace';
+  variants: string[];
+  isVariable: boolean;
+  popularRank: number;
+  axes?: {
+    weight?: [number, number];
+    width?: [number, number];
+    slant?: [number, number];
+  };
+}
 
 export interface HistoryStep {
   id: string;

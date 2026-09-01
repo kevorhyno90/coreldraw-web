@@ -118,6 +118,10 @@ export async function exportToPdf(
   });
 }
 
+// Alias for PDF document export
+export const exportToPdfDocument = exportToPdf;
+
+
 // Export CDRW JSON project file
 export function exportToCorelJson(project: ProjectDocument, filename: string = 'drawing'): void {
   const jsonStr = JSON.stringify(project, null, 2);

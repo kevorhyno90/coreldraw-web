@@ -1,11 +1,13 @@
 import React from 'react';
 import { CorelProvider } from './context/CorelContext';
+import { SuiteModeBar } from './components/layout/SuiteModeBar';
 import { MenuBar } from './components/layout/MenuBar';
 import { StandardToolbar } from './components/layout/StandardToolbar';
 import { DynamicPropertyBar } from './components/layout/DynamicPropertyBar';
 import { Toolbox } from './components/tools/Toolbox';
 import { Workspace } from './components/canvas/Workspace';
 import { DockersContainer } from './components/dockers/DockersContainer';
+import { MultiPageBar } from './components/layout/MultiPageBar';
 import { BottomStatusBar } from './components/layout/BottomStatusBar';
 import { NewDocDialog } from './components/dialogs/NewDocDialog';
 import { ExportDialog } from './components/dialogs/ExportDialog';
@@ -18,7 +20,10 @@ export function CorelDrawApp() {
   return (
     <CorelProvider>
       <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#181a20] text-gray-200 font-sans select-none">
-        {/* Top Navigation & Toolbars */}
+        {/* Top CorelDRAW Graphics Suite 2025 App Switcher */}
+        <SuiteModeBar />
+
+        {/* Top Menus & Toolbars */}
         <MenuBar />
         <StandardToolbar />
         <DynamicPropertyBar />
@@ -29,6 +34,9 @@ export function CorelDrawApp() {
           <Workspace />
           <DockersContainer />
         </div>
+
+        {/* Multi-Page Brochure / Catalog Layout Bar */}
+        <MultiPageBar />
 
         {/* Bottom Status & Color Palette Bar */}
         <BottomStatusBar />

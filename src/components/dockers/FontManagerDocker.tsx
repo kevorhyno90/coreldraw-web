@@ -1,6 +1,12 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useCorel } from '../../context/CorelContext';
-import { GOOGLE_FONTS_CATALOG, loadGoogleFont } from '../../engine/googleFontsLibrary';
+import {
+  GOOGLE_FONTS_CATALOG,
+  loadGoogleFont,
+  loadCustomFontFile,
+  querySystemFonts,
+} from '../../engine/googleFontsLibrary';
+import { GoogleFontMeta } from '../../types/coreldraw';
 import {
   Type,
   Search,
@@ -16,6 +22,9 @@ import {
   Layers,
   FileText,
   Plus,
+  Upload,
+  Laptop,
+  FolderOpen,
 } from 'lucide-react';
 
 const COMMON_GLYPHS = [
@@ -36,7 +45,7 @@ export const FontManagerDocker: React.FC = () => {
     activePage,
   } = useCorel();
 
-  const [activeTab, setActiveTab] = useState<'catalog' | 'variable' | 'glyphs' | 'waterfall'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'variable' | 'glyphs' | 'waterfall' | 'install'>('catalog');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeFont, setActiveFont] = useState<string>('Montserrat');
@@ -45,15 +54,29 @@ export const FontManagerDocker: React.FC = () => {
   const [variableWeight, setVariableWeight] = useState(700);
   const [variableSlant, setVariableSlant] = useState(0);
 
+  // Custom user installed fonts
+  const [customFonts, setCustomFonts] = useState<GoogleFontMeta[]>([]);
+  const [customFontInput, setCustomFontInput] = useState('');
+
+  const fontFileInputRef = useRef<HTMLInputElement>(null);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
 
+  const allFontsList = useMemo(() => {
+    return [...customFonts, ...GOOGLE_FONTS_CATALOG];
+  }, [customFonts]);
+
   const filteredFonts = useMemo(() => {
-    return GOOGLE_FONTS_CATALOG.filter(f => {
+    return allFontsList.filter(f => {
       const matchSearch = f.family.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchCat = selectedCategory === 'all' || f.category === selectedCategory || (selectedCategory === 'variable' && f.isVariable);
+      const matchCat =
+        selectedCategory === 'all' ||
+        f.category === selectedCategory ||
+        (selectedCategory === 'variable' && f.isVariable) ||
+        (selectedCategory === 'custom' && f.category === 'custom') ||
+        (selectedCategory === 'system' && f.category === 'system');
       return matchSearch && matchCat;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [allFontsList, searchQuery, selectedCategory]);
 
   const handleApplyFont = (fontFamily: string) => {
     loadGoogleFont(fontFamily);
@@ -70,7 +93,7 @@ export const FontManagerDocker: React.FC = () => {
         },
       });
     } else {
-      // Create new text sample on canvas
+      // Create new typography sample on canvas
       addObject({
         name: `Typography (${fontFamily})`,
         type: 'text',
@@ -102,6 +125,65 @@ export const FontManagerDocker: React.FC = () => {
         outline: { color: 'none', width: 0, style: 'solid', cap: 'round', join: 'round', startArrow: 'none', endArrow: 'none' },
       });
     }
+  };
+
+  const handleInstallFontFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const fontName = await loadCustomFontFile(file);
+        const newFontMeta: GoogleFontMeta = {
+          family: fontName,
+          category: 'custom',
+          variants: ['400', '700'],
+          isVariable: false,
+          popularRank: 0,
+        };
+        setCustomFonts(prev => [newFontMeta, ...prev.filter(f => f.family !== fontName)]);
+        setActiveFont(fontName);
+      } catch (err) {
+        console.error('Failed to load font file:', err);
+        alert(`Could not load font file "${file.name}". Please ensure it is a valid .ttf, .otf, or .woff file.`);
+      }
+    }
+    e.target.value = '';
+  };
+
+  const handleScanSystemFonts = async () => {
+    const sys = await querySystemFonts();
+    if (sys.length > 0) {
+      const systemMeta: GoogleFontMeta[] = sys.map(name => ({
+        family: name,
+        category: 'system',
+        variants: ['400', '700'],
+        isVariable: false,
+        popularRank: 999,
+      }));
+      setCustomFonts(prev => [...prev, ...systemMeta]);
+      alert(`Successfully scanned and imported ${sys.length} system fonts!`);
+    } else {
+      alert("Local Font Access API is not enabled in this browser, or permission was declined. You can still upload any .ttf/.otf font file or load from Google Fonts!");
+    }
+  };
+
+  const handleLoadOnDemandFont = () => {
+    if (!customFontInput.trim()) return;
+    const fontName = customFontInput.trim();
+    loadGoogleFont(fontName);
+
+    const newFontMeta: GoogleFontMeta = {
+      family: fontName,
+      category: 'display',
+      variants: ['400', '700'],
+      isVariable: true,
+      popularRank: 0,
+    };
+    setCustomFonts(prev => [newFontMeta, ...prev]);
+    handleApplyFont(fontName);
+    setCustomFontInput('');
   };
 
   const handleInsertGlyph = (glyph: string) => {
@@ -155,6 +237,16 @@ export const FontManagerDocker: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#181a20] text-gray-200 text-xs overflow-hidden divide-y divide-gray-800">
+      {/* Hidden File Input for Custom Font Installer */}
+      <input
+        type="file"
+        ref={fontFileInputRef}
+        accept=".ttf,.otf,.woff,.woff2"
+        multiple
+        onChange={handleInstallFontFile}
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="p-3 bg-gradient-to-r from-emerald-950/40 via-teal-950/30 to-blue-950/40 border-b border-gray-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -166,7 +258,7 @@ export const FontManagerDocker: React.FC = () => {
               Corel Font Manager 2025
             </div>
             <div className="text-[10px] text-gray-400">
-              300+ Google Fonts & Glyphs
+              Universal Google Fonts & Local Font Studio
             </div>
           </div>
         </div>
@@ -190,10 +282,11 @@ export const FontManagerDocker: React.FC = () => {
         </div>
       </div>
 
-      {/* Sideways Navigation Tabs (Catalog, Variable Studio, Glyphs, Waterfall) */}
+      {/* Sideways Navigation Tabs */}
       <div className="flex items-center bg-[#13161c] px-2 py-1 gap-1 border-b border-gray-800 overflow-x-auto scrollbar-none">
         {[
           { id: 'catalog', label: 'Catalog', icon: Type },
+          { id: 'install', label: '➕ Add Any Font', icon: Upload },
           { id: 'variable', label: 'Variable Studio', icon: Sliders },
           { id: 'glyphs', label: 'Glyph Map', icon: Sparkles },
           { id: 'waterfall', label: 'Waterfall', icon: FileText },
@@ -226,7 +319,7 @@ export const FontManagerDocker: React.FC = () => {
               <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search 300+ fonts (Montserrat, Playfair, Bebas)..."
+                placeholder="Search any font in the world (e.g. Montserrat, Teko, Garamond)..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 bg-gray-900 border border-gray-700/80 rounded-xl text-gray-200 text-xs outline-none focus:border-emerald-500 transition-colors"
@@ -260,12 +353,14 @@ export const FontManagerDocker: React.FC = () => {
                 className="flex-1 flex gap-1 overflow-x-auto py-0.5 scrollbar-none px-1"
               >
                 {[
-                  { id: 'all', label: 'All' },
+                  { id: 'all', label: 'All Fonts' },
                   { id: 'sans-serif', label: 'Sans-Serif' },
                   { id: 'serif', label: 'Serif' },
-                  { id: 'display', label: 'Display' },
-                  { id: 'handwriting', label: 'Script' },
-                  { id: 'monospace', label: 'Monospace' },
+                  { id: 'display', label: 'Display & Posters' },
+                  { id: 'handwriting', label: 'Calligraphy & Script' },
+                  { id: 'monospace', label: 'Monospace & Code' },
+                  { id: 'system', label: '💻 System Fonts' },
+                  { id: 'custom', label: '📦 Installed / Local' },
                   { id: 'variable', label: '✨ Variable' },
                 ].map(cat => (
                   <button
@@ -292,6 +387,26 @@ export const FontManagerDocker: React.FC = () => {
             </div>
           </div>
 
+          {/* Quick On-Demand Load Banner if search has no exact match */}
+          {filteredFonts.length === 0 && searchQuery.trim() && (
+            <div className="p-3 bg-gray-900/90 border-b border-gray-800 flex items-center justify-between">
+              <div>
+                <div className="text-gray-200 font-semibold">Load "{searchQuery}" from Global Web?</div>
+                <div className="text-[10px] text-gray-400">Instantly pulls font from Google Fonts API</div>
+              </div>
+              <button
+                onClick={() => {
+                  loadGoogleFont(searchQuery.trim());
+                  handleApplyFont(searchQuery.trim());
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold flex items-center gap-1 shadow"
+              >
+                <Download size={13} />
+                <span>Load & Apply</span>
+              </button>
+            </div>
+          )}
+
           {/* Font Cards List / Grid */}
           <div className="flex-1 overflow-y-auto overflow-x-hidden p-2.5">
             <div className={`grid gap-2 ${layoutMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
@@ -316,6 +431,11 @@ export const FontManagerDocker: React.FC = () => {
                             VAR
                           </span>
                         )}
+                        {font.category === 'custom' && (
+                          <span className="text-[8px] bg-purple-900/60 text-purple-300 border border-purple-700/50 px-1 py-0.2 rounded font-mono">
+                            LOCAL
+                          </span>
+                        )}
                       </div>
                       <span className="text-[9px] text-gray-500 capitalize">{font.category}</span>
                     </div>
@@ -338,7 +458,85 @@ export const FontManagerDocker: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: VARIABLE STUDIO */}
+      {/* TAB 2: ADD ANY FONT (LOCAL FILES, SYSTEM FONTS & WEBFONTS) */}
+      {activeTab === 'install' && (
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {/* 1. Install Local TTF/OTF File */}
+          <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-purple-500/20 text-purple-400 rounded-lg">
+                <FolderOpen size={18} />
+              </div>
+              <div>
+                <div className="font-bold text-white text-xs">Install Custom Font File</div>
+                <div className="text-[10px] text-gray-400">Upload any .TTF, .OTF, .WOFF, or .WOFF2 file from your computer</div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => fontFileInputRef.current?.click()}
+              className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 transition-all"
+            >
+              <Upload size={15} />
+              <span>Choose Font File from Computer...</span>
+            </button>
+          </div>
+
+          {/* 2. Add by Font Name on Demand */}
+          <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <div className="font-bold text-white text-xs">Add Any Google / Web Font by Name</div>
+                <div className="text-[10px] text-gray-400">Type any font name in the world to download on demand</div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customFontInput}
+                onChange={e => setCustomFontInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleLoadOnDemandFont()}
+                placeholder="e.g. Teko, Bodoni 72, Audiowide..."
+                className="flex-1 px-3 py-1.5 bg-gray-950 border border-gray-700 rounded-xl text-white outline-none focus:border-emerald-500 text-xs"
+              />
+              <button
+                onClick={handleLoadOnDemandFont}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow"
+              >
+                <Plus size={14} />
+                <span>Add Font</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Scan Operating System Fonts */}
+          <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg">
+                <Laptop size={18} />
+              </div>
+              <div>
+                <div className="font-bold text-white text-xs">Scan System Installed Fonts</div>
+                <div className="text-[10px] text-gray-400">Access all fonts installed on your Windows / Mac OS</div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleScanSystemFonts}
+              className="w-full py-2 bg-blue-600/80 hover:bg-blue-600 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all shadow"
+            >
+              <Laptop size={15} />
+              <span>Scan & Import Installed System Fonts</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: VARIABLE STUDIO */}
       {activeTab === 'variable' && (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
           <div className="flex items-center justify-between bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-800/40">
@@ -429,7 +627,7 @@ export const FontManagerDocker: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: GLYPH MAP & CHARACTER INSPECTOR */}
+      {/* TAB 4: GLYPH MAP & CHARACTER INSPECTOR */}
       {activeTab === 'glyphs' && (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
           <div className="flex items-center justify-between">
@@ -458,7 +656,7 @@ export const FontManagerDocker: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: WATERFALL SPECIMEN */}
+      {/* TAB 5: WATERFALL SPECIMEN */}
       {activeTab === 'waterfall' && (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 divide-y divide-gray-800/60">
           <div className="flex items-center justify-between pb-2">

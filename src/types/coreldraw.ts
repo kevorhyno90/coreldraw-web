@@ -410,7 +410,7 @@ export interface PantoneColor {
 
 export interface GoogleFontMeta {
   family: string;
-  category: 'sans-serif' | 'serif' | 'display' | 'handwriting' | 'monospace';
+  category: 'sans-serif' | 'serif' | 'display' | 'handwriting' | 'monospace' | 'system' | 'custom';
   variants: string[];
   isVariable: boolean;
   popularRank: number;

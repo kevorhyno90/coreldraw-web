@@ -510,6 +510,62 @@ export const MenuBar: React.FC = () => {
             )}
           </div>
 
+          {/* Text Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setActiveMenu(activeMenu === 'text' ? null : 'text')}
+              onMouseEnter={() => activeMenu && setActiveMenu('text')}
+              className={`px-2 py-1 rounded hover:bg-[#2d3748] ${
+                activeMenu === 'text' ? 'bg-[#2d3748] text-emerald-400 font-semibold' : 'text-gray-300'
+              }`}
+            >
+              Text
+            </button>
+            {activeMenu === 'text' && (
+              <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#1f2430] border border-[#374151] rounded-md shadow-2xl py-1 z-50 text-gray-200">
+                <button
+                  onClick={() => { setActiveDockerTab('fontmanager'); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between font-semibold text-emerald-400"
+                >
+                  <span className="flex items-center"><Type className="w-3.5 h-3.5 mr-2" /> Corel Font Manager 2025</span>
+                  <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1 rounded">All Fonts</span>
+                </button>
+                <button
+                  onClick={() => { setActiveDockerTab('fontmanager'); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between"
+                >
+                  <span>➕ Add Any Font in the World...</span>
+                  <span className="text-xs">🌐</span>
+                </button>
+                <button
+                  onClick={() => { setActiveDockerTab('fontmanager'); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between"
+                >
+                  <span>📁 Install Local Font File (.ttf/.otf)...</span>
+                  <span className="text-xs">💾</span>
+                </button>
+                <button
+                  onClick={() => { setActiveDockerTab('fontmanager'); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between"
+                >
+                  <span>✨ Unicode Glyphs & Symbols Map...</span>
+                  <span className="text-xs">🔣</span>
+                </button>
+                <div className="border-t border-[#374151] my-1" />
+                <button
+                  onClick={() => {
+                    if (primarySelectedObject) convertToCurves(primarySelectedObject.id);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between"
+                >
+                  <span>Convert Text to Curves</span>
+                  <span className="text-gray-500 text-[10px]">Ctrl+Q</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Window / Dockers Menu */}
           <div className="relative">
             <button
@@ -525,11 +581,11 @@ export const MenuBar: React.FC = () => {
               <div className="absolute left-0 top-full mt-0.5 w-56 bg-[#1f2430] border border-[#374151] rounded-md shadow-2xl py-1 z-50 text-gray-200">
                 <div className="px-3 py-1 text-[10px] uppercase font-bold text-gray-500 tracking-wider">Inspectors & Dockers</div>
                 <button
-                  onClick={() => { setActiveDockerTab('typography'); setActiveMenu(null); }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between font-medium text-amber-300"
+                  onClick={() => { setActiveDockerTab('fontmanager'); setActiveMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#2563eb] hover:text-white flex items-center justify-between font-medium text-emerald-300"
                 >
-                  <span>Typography & Font Manager</span>
-                  {activeDockerTab === 'typography' && <span className="text-emerald-400">✓</span>}
+                  <span>Corel Font Manager 2025</span>
+                  {activeDockerTab === 'fontmanager' && <span className="text-emerald-400">✓</span>}
                 </button>
                 <button
                   onClick={() => { setActiveDockerTab('photo'); setActiveMenu(null); }}

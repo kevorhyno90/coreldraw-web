@@ -107,6 +107,7 @@ export const DynamicPropertyBar: React.FC = () => {
     setActiveBrushAngle,
     activeBrushSmoothing,
     setActiveBrushSmoothing,
+    setActiveDockerTab,
   } = useCorel();
 
   // Artistic Media Tool Ribbon
@@ -422,15 +423,30 @@ export const DynamicPropertyBar: React.FC = () => {
           <select
             value={primary.textProps.fontFamily}
             onChange={e => {
+              if (e.target.value === '__add_font__') {
+                setActiveDockerTab('fontmanager');
+                return;
+              }
               loadGoogleFont(e.target.value);
               updateObject(primary.id, { textProps: { ...primary.textProps!, fontFamily: e.target.value } });
             }}
             className="bg-[#262e3d] text-white px-2 py-0.5 rounded border border-[#374151] outline-none font-medium text-xs"
           >
+            <option value="__add_font__">➕ Add / Install Any Font...</option>
             {FONT_FAMILIES.map(font => (
               <option key={font} value={font}>{font}</option>
             ))}
           </select>
+
+          {/* Quick Font Manager / Add Font Button */}
+          <button
+            onClick={() => setActiveDockerTab('fontmanager')}
+            className="px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded font-semibold text-[11px] flex items-center gap-1 shadow-sm transition-all"
+            title="Open Corel Font Manager 2025 (Add any font in the world, install .ttf/.otf, scan system fonts)"
+          >
+            <Type className="w-3 h-3" />
+            <span>Font Manager</span>
+          </button>
 
           {/* Font Size with Stepper */}
           <div className="flex items-center space-x-0.5 bg-[#262e3d] px-1 py-0.5 rounded border border-[#374151]">

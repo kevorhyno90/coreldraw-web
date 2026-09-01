@@ -20,6 +20,7 @@ import {
   Sparkles,
   Layers,
   SlidersHorizontal,
+  Type,
 } from 'lucide-react';
 import { exportToCorelJson } from '../../engine/exportEngine';
 import { parseSvgToCorelObjects } from '../../engine/svgEngine';
@@ -118,6 +119,16 @@ export const StandardToolbar: React.FC = () => {
         >
           <Sparkles className="w-4 h-4" />
           <span className="text-[10px] hidden lg:inline font-mono">Ctrl+K</span>
+        </button>
+
+        {/* Corel Font Manager Quick Button */}
+        <button
+          onClick={() => setActiveDockerTab('fontmanager')}
+          title="Corel Font Manager 2025 (Universal Fonts & Local Font Installer)"
+          className="px-2 py-1 bg-gradient-to-r from-emerald-600/30 to-teal-600/30 hover:from-emerald-600/60 hover:to-teal-600/60 text-emerald-300 border border-emerald-500/40 rounded flex items-center space-x-1 font-semibold text-[11px] transition-all"
+        >
+          <Type className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Font Manager</span>
         </button>
 
         <div className="h-4 w-[1px] bg-[#374151] mx-1" />

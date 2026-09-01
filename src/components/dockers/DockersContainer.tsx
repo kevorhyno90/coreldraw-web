@@ -15,6 +15,7 @@ import { TypographyDocker } from './TypographyDocker';
 import { FontManagerDocker } from './FontManagerDocker';
 import { PrepressDocker } from './PrepressDocker';
 import { CloudHubDocker } from './CloudHubDocker';
+import { BarcodeDocker } from './BarcodeDocker';
 import { AiAssistantDocker } from './AiAssistantDocker';
 import {
   SlidersHorizontal,
@@ -30,6 +31,7 @@ import {
   Type,
   Printer,
   Cloud,
+  QrCode,
   Bot,
   ChevronRight,
   X,
@@ -44,12 +46,13 @@ interface DockerItem {
 
 const DOCKERS: DockerItem[] = [
   { id: 'properties', title: 'Properties', icon: SlidersHorizontal, component: PropertiesDocker },
+  { id: 'effects', title: 'Effects & 3D (Blend, Shadow)', icon: Boxes, component: EffectsDocker },
   { id: 'prepress', title: 'Prepress & Separations 2025', icon: Printer, component: PrepressDocker },
   { id: 'fontmanager', title: 'Corel Font Manager 2025', icon: Type, component: FontManagerDocker },
   { id: 'colors', title: 'Pantone 2025 & Palettes', icon: Palette, component: ColorPaletteDocker },
+  { id: 'barcode', title: 'Barcode & QR Code Wizard', icon: QrCode, component: BarcodeDocker },
   { id: 'photo', title: 'PHOTO-PAINT Lab', icon: ImageIcon, component: PhotoEditingDocker },
   { id: 'objects', title: 'Objects & Layers', icon: Layers, component: ObjectManagerDocker },
-  { id: 'effects', title: 'Effects & 3D', icon: Boxes, component: EffectsDocker },
   { id: 'shaping', title: 'Shaping & Booleans', icon: Shapes, component: ShapingDocker },
   { id: 'trace', title: 'PowerTRACE 2025', icon: Sparkles, component: AutoTraceDocker },
   { id: 'cloud', title: 'CorelDRAW Cloud Hub', icon: Cloud, component: CloudHubDocker },

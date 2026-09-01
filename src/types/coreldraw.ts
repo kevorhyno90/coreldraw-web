@@ -360,6 +360,7 @@ export type DockerTab =
   | 'typography'
   | 'fontmanager'
   | 'prepress'
+  | 'barcode'
   | 'ai'
   | 'trace'
   | 'align'

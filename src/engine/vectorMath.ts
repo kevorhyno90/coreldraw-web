@@ -11,6 +11,11 @@ export function lerp(p1: Point2D, p2: Point2D, t: number): Point2D {
   };
 }
 
+export function lerpNum(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+
 export function rotatePoint(p: Point2D, center: Point2D, angleDeg: number): Point2D {
   const rad = (angleDeg * Math.PI) / 180;
   const cos = Math.cos(rad);

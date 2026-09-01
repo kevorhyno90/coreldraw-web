@@ -215,6 +215,14 @@ interface CorelContextType {
   promptInstall: () => void;
 
   // Project Serialization
+  createNewDocument: (options?: {
+    title?: string;
+    preset?: string;
+    width?: number;
+    height?: number;
+    orientation?: 'portrait' | 'landscape';
+    background?: string;
+  }) => void;
   loadProjectDocument: (doc: ProjectDocument) => void;
   loadTemplate: (templateId: string) => void;
   getProjectDocument: () => ProjectDocument;
@@ -1041,6 +1049,52 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   }, [selectionBounds, zoomToFit]);
 
+  // Create New Clean Document
+  const createNewDocument = useCallback((options?: {
+    title?: string;
+    preset?: string;
+    width?: number;
+    height?: number;
+    orientation?: 'portrait' | 'landscape';
+    background?: string;
+  }) => {
+    const docTitle = options?.title || 'New Graphic 1';
+    const orient = options?.orientation || 'landscape';
+    const w = options?.width || (orient === 'landscape' ? 1000 : 750);
+    const h = options?.height || (orient === 'landscape' ? 750 : 1000);
+    const presetName = options?.preset || 'A4 Standard';
+    const bg = options?.background || '#ffffff';
+
+    const newPage: CorelPage = {
+      id: `page_${Date.now()}`,
+      name: 'Page 1',
+      width: w,
+      height: h,
+      unit: 'px',
+      preset: presetName,
+      orientation: orient,
+      background: bg,
+      isMasterPage: false,
+    };
+
+    setProjectTitle(docTitle);
+    setPages([newPage]);
+    setActivePageId(newPage.id);
+    setObjects({
+      [newPage.id]: [],
+    });
+    setSelectedIds([]);
+    setSelectedNodeIds([]);
+    setGuidelines([
+      { id: `g_${Date.now()}_1`, orientation: 'horizontal', position: h / 2, color: '#06b6d4' },
+      { id: `g_${Date.now()}_2`, orientation: 'vertical', position: w / 2, color: '#06b6d4' },
+    ]);
+    setHistory([]);
+    setHistoryIndex(-1);
+    setZoom(1);
+    setPan({ x: 80, y: 40 });
+  }, []);
+
   // Load Template
   const loadTemplate = useCallback((templateId: string) => {
     const t = PRESET_TEMPLATES.find(tpl => tpl.id === templateId);
@@ -1184,6 +1238,7 @@ export const CorelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isOnline,
         isInstallable,
         promptInstall,
+        createNewDocument,
         loadProjectDocument,
         loadTemplate,
         getProjectDocument,

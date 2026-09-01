@@ -67,6 +67,12 @@ export const Workspace: React.FC = () => {
     convertToCurves,
     painterlySettings,
     prepressSettings,
+    setOpenDialog,
+    deleteSelected,
+    duplicateSelected,
+    undo,
+    redo,
+    selectAll,
   } = useCorel();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -132,25 +138,68 @@ export const Workspace: React.FC = () => {
     return last.offsetX + last.width;
   }, [pagePositions]);
 
-  // Keyboard Spacebar listener
+  // Global Keyboard Shortcuts (New Doc, Undo, Redo, Delete, Fit, F-keys)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !(e.target as HTMLElement).matches('input, textarea, select')) {
+      const isInput = (e.target as HTMLElement).matches('input, textarea, select');
+      if (isInput) return;
+
+      if (e.code === 'Space') {
         setIsSpacePressed(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setOpenDialog('new');
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        setOpenDialog('export');
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        duplicateSelected();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        selectAll();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        deleteSelected();
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        zoomToFit();
+      } else if (e.key === 'F5') {
+        e.preventDefault();
+        setActiveTool('freehand');
+      } else if (e.key === 'F6') {
+        e.preventDefault();
+        setActiveTool('rectangle');
+      } else if (e.key === 'F7') {
+        e.preventDefault();
+        setActiveTool('ellipse');
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        setActiveTool('text');
+      } else if (e.key === 'F10') {
+        e.preventDefault();
+        setActiveTool('shape');
+      } else if (e.key.toLowerCase() === 'b') {
+        setActiveTool('painterly-brush');
       }
     };
+
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         setIsSpacePressed(false);
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [setOpenDialog, deleteSelected, duplicateSelected, undo, redo, selectAll, zoomToFit, setActiveTool]);
 
   // Convert Screen (Client) coords to Canvas space coords
   const screenToCanvas = useCallback(

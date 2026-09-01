@@ -11,7 +11,7 @@ const PRESETS = [
 ];
 
 export const NewDocDialog: React.FC = () => {
-  const { openDialog, setOpenDialog, setProjectTitle, updateActivePage, clearSelection } = useCorel();
+  const { openDialog, setOpenDialog, createNewDocument } = useCorel();
   const [title, setTitle] = useState('New Graphic 1');
   const [selectedPreset, setSelectedPreset] = useState(PRESETS[0]);
   const [width, setWidth] = useState(PRESETS[0].width);
@@ -22,16 +22,17 @@ export const NewDocDialog: React.FC = () => {
   if (openDialog !== 'new') return null;
 
   const handleCreate = () => {
-    setProjectTitle(title);
-    updateActivePage({
-      name: 'Page 1',
-      width: orientation === 'landscape' ? Math.max(width, height) : Math.min(width, height),
-      height: orientation === 'landscape' ? Math.min(width, height) : Math.max(width, height),
+    const finalW = orientation === 'landscape' ? Math.max(width, height) : Math.min(width, height);
+    const finalH = orientation === 'landscape' ? Math.min(width, height) : Math.max(width, height);
+
+    createNewDocument({
+      title: title || 'New Graphic 1',
       preset: selectedPreset.name,
+      width: finalW,
+      height: finalH,
       orientation,
       background: bgColor,
     });
-    clearSelection();
     setOpenDialog(null);
   };
 

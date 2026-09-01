@@ -686,18 +686,16 @@ export const Workspace: React.FC = () => {
       setActivePageId(pageId);
     }
 
-    if (activeTool === 'text') {
-      setEditingTextId(obj.id);
-      return;
-    }
-
     if (activeTool === 'color-eyedropper') {
       alert(`Sampled Color: ${obj.fill.color}`);
       return;
     }
 
-    if (activeTool === 'pick' || activeTool === 'freehand-pick' || activeTool === 'shape' || activeTool === 'interactive-fill') {
-      toggleSelect(obj.id, e.shiftKey);
+    // Always select the clicked object
+    toggleSelect(obj.id, e.shiftKey);
+
+    if (activeTool === 'text') {
+      setEditingTextId(obj.id);
     }
   };
 
@@ -903,6 +901,16 @@ export const Workspace: React.FC = () => {
                     className="cursor-pointer"
                   >
                     <g transform={transformAttr}>
+                      {/* Transparent Hit Area covering the entire object bounding box */}
+                      <rect
+                        x={0}
+                        y={0}
+                        width={Math.max(20, w)}
+                        height={Math.max(20, h)}
+                        fill="transparent"
+                        pointerEvents="all"
+                      />
+
                       {extrudeFacets.map((facet, fIdx) => (
                         <polygon
                           key={`facet_${fIdx}`}
@@ -934,10 +942,11 @@ export const Workspace: React.FC = () => {
                             const offsetStep = exIdx + 1;
                             const exX = Math.cos(rad) * offsetStep * 1.5;
                             const exY = Math.sin(rad) * offsetStep * 1.5;
+                            const textX = obj.textProps?.textAlign === 'center' ? w / 2 : obj.textProps?.textAlign === 'right' ? w : 0;
                             return (
                               <text
                                 key={`text_ex_${exIdx}`}
-                                x={exX}
+                                x={textX + exX}
                                 y={obj.textProps!.fontSize + exY}
                                 fontFamily={obj.textProps!.fontFamily}
                                 fontSize={obj.textProps!.fontSize}
@@ -958,7 +967,7 @@ export const Workspace: React.FC = () => {
                       {/* Native SVG Text Element */}
                       {obj.type === 'text' && obj.textProps && obj.id !== editingTextId && (
                         <text
-                          x={0}
+                          x={obj.textProps.textAlign === 'center' ? w / 2 : obj.textProps.textAlign === 'right' ? w : 0}
                           y={obj.textProps.fontSize}
                           fontFamily={obj.textProps.fontFamily}
                           fontSize={obj.textProps.fontSize}
